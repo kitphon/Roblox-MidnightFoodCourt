@@ -1,0 +1,13 @@
+# Repository migration — 2026-10-24
+- Confirmed original Studio Edit PlaceId 120399989321685, UniverseId 10772566896.
+- Read-only source export: 29 .luau files with original class/path mapping.
+- Serialized 33 original model assets through SerializationService, including four kitchens/city/terrain/remotes/sounds.
+- Captured selected Workspace/Lighting/StarterPlayer/SoundService/Players service settings and Studio sandbox flags.
+- Rojo pinned to 7.7.1, binaries downloaded from official GitHub release to ignored .tools.
+- Rojo binary and XML builds passed. Sourcemap generation passed.
+- Python verifier confirms 62 mapped paths, model binary headers, file hashes, and exact normalized source/class/path round-trip for all 29 scripts.
+- Rojo warns about unsupported Terrain.VoxelGridAssetContentMap type. Original terrain data retained; original Terrain:CountCells()=0.
+- No gameplay source edits, no publication, no purchase, no Roblox access-setting changes.
+- Separate Studio session playtest of generated build remains pending.
+- Native UI saving failed with coordinate input geometry unavailable; serialization-based export used instead. Temporary localhost receiver attempt stopped; HTTP was disabled and not enabled.
+- Git initialized with main. Staging failed with .git/index.lock permission denied, including after scoped permission grant; no staged commit, remote or push. User can git add/commit from their own terminal.

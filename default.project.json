@@ -1,0 +1,334 @@
+{
+  "servePlaceIds": [
+    120399989321685
+  ],
+  "name": "MidnightFoodCourt",
+  "tree": {
+    "Lighting": {
+      "SunRays": {
+        "$path": "assets/Lighting/SunRays.rbxm"
+      },
+      "DepthOfField": {
+        "$path": "assets/Lighting/DepthOfField.rbxm"
+      },
+      "Sky": {
+        "$path": "assets/Lighting/Sky.rbxm"
+      },
+      "Atmosphere": {
+        "$path": "assets/Lighting/Atmosphere.rbxm"
+      },
+      "$className": "Lighting",
+      "$properties": {
+        "ClockTime": 23,
+        "FogColor": [
+          0.07058823853731155,
+          0.10588235408067703,
+          0.16078431904315948
+        ],
+        "FogEnd": 190,
+        "GlobalShadows": true,
+        "EnvironmentSpecularScale": 1,
+        "GeographicLatitude": 0,
+        "FogStart": 65,
+        "Ambient": [
+          0.1725490242242813,
+          0.21176470816135406,
+          0.29411765933036804
+        ],
+        "OutdoorAmbient": [
+          0.13333334028720856,
+          0.1725490242242813,
+          0.2549019753932953
+        ],
+        "ExposureCompensation": 0,
+        "Brightness": 2,
+        "ShadowSoftness": 0.20000000298023224,
+        "EnvironmentDiffuseScale": 1
+      },
+      "Bloom": {
+        "$path": "assets/Lighting/Bloom.rbxm"
+      }
+    },
+    "ReplicatedFirst": {
+      "$className": "ReplicatedFirst"
+    },
+    "StarterPack": {
+      "$className": "StarterPack"
+    },
+    "Chat": {
+      "$className": "Chat"
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage"
+    },
+    "Workspace": {
+      "$properties": {
+        "Gravity": 196.1999969482422,
+        "FallenPartsDestroyHeight": -500,
+        "StreamingEnabled": true
+      },
+      "MidnightCity": {
+        "$path": "assets/Workspace/MidnightCity.rbxm"
+      },
+      "Baseplate": {
+        "$path": "assets/Workspace/Baseplate.rbxm"
+      },
+      "CityLobbySpawn": {
+        "$path": "assets/Workspace/CityLobbySpawn.rbxm"
+      },
+      "Terrain": {
+        "$path": "assets/Workspace/Terrain.rbxm"
+      },
+      "$className": "Workspace",
+      "SpawnLocation": {
+        "$path": "assets/Workspace/SpawnLocation.rbxm"
+      },
+      "MidnightShops": {
+        "$path": "assets/Workspace/MidnightShops.rbxm"
+      }
+    },
+    "StarterGui": {
+      "$className": "StarterGui"
+    },
+    "$className": "DataModel",
+    "Players": {
+      "$properties": {
+        "RespawnTime": 3,
+        "CharacterAutoLoads": true
+      },
+      "$className": "Players"
+    },
+    "LocalizationService": {
+      "$className": "LocalizationService"
+    },
+    "SoundService": {
+      "MK_Rain": {
+        "$path": "assets/SoundService/MK_Rain.rbxm"
+      },
+      "$properties": {
+        "AmbientReverb": "NoReverb",
+        "RolloffScale": 1,
+        "DopplerScale": 1,
+        "RespectFilteringEnabled": true,
+        "DistanceFactor": 3.3299999237060547
+      },
+      "MK_Shadow": {
+        "$path": "assets/SoundService/MK_Shadow.rbxm"
+      },
+      "MK_Ding": {
+        "$path": "assets/SoundService/MK_Ding.rbxm"
+      },
+      "MK_LevelUp": {
+        "$path": "assets/SoundService/MK_LevelUp.rbxm"
+      },
+      "MK_DoorBell": {
+        "$path": "assets/SoundService/MK_DoorBell.rbxm"
+      },
+      "MK_Sizzle": {
+        "$path": "assets/SoundService/MK_Sizzle.rbxm"
+      },
+      "MK_Pour": {
+        "$path": "assets/SoundService/MK_Pour.rbxm"
+      },
+      "MK_Static": {
+        "$path": "assets/SoundService/MK_Static.rbxm"
+      },
+      "MK_Blackout": {
+        "$path": "assets/SoundService/MK_Blackout.rbxm"
+      },
+      "MK_BusHorn": {
+        "$path": "assets/SoundService/MK_BusHorn.rbxm"
+      },
+      "MK_Music": {
+        "$path": "assets/SoundService/MK_Music.rbxm"
+      },
+      "$className": "SoundService",
+      "MK_Cash": {
+        "$path": "assets/SoundService/MK_Cash.rbxm"
+      },
+      "MK_CityNight": {
+        "$path": "assets/SoundService/MK_CityNight.rbxm"
+      }
+    },
+    "Teams": {
+      "$className": "Teams"
+    },
+    "MaterialService": {
+      "$className": "MaterialService"
+    },
+    "TextChatService": {
+      "ChatWindowConfiguration": {
+        "$path": "assets/TextChatService/ChatWindowConfiguration.rbxm"
+      },
+      "ChatInputBarConfiguration": {
+        "$path": "assets/TextChatService/ChatInputBarConfiguration.rbxm"
+      },
+      "BubbleChatConfiguration": {
+        "$path": "assets/TextChatService/BubbleChatConfiguration.rbxm"
+      },
+      "$className": "TextChatService",
+      "$properties": {
+        "ChatVersion": "TextChatService"
+      },
+      "ChannelTabsConfiguration": {
+        "$path": "assets/TextChatService/ChannelTabsConfiguration.rbxm"
+      }
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "DevComputerMovementMode": "UserChoice",
+        "CharacterJumpPower": 50,
+        "CameraMode": "Classic",
+        "CameraMinZoomDistance": 4,
+        "LoadCharacterAppearance": true,
+        "CharacterUseJumpPower": false,
+        "DevComputerCameraMovementMode": "UserChoice",
+        "DevTouchMovementMode": "UserChoice",
+        "CharacterWalkSpeed": 16,
+        "EnableMouseLockOption": false,
+        "DevTouchCameraMovementMode": "UserChoice",
+        "CameraMaxZoomDistance": 12
+      },
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "MidnightManagement": {
+          "$properties": {
+            "Disabled": false
+          },
+          "$path": "src/client/StarterPlayer/StarterPlayerScripts/MidnightManagement.client.luau"
+        },
+        "MidnightStyleShop": {
+          "$properties": {
+            "Disabled": false
+          },
+          "$path": "src/client/StarterPlayer/StarterPlayerScripts/MidnightStyleShop.client.luau"
+        },
+        "MidnightGameplay": {
+          "$properties": {
+            "Disabled": false
+          },
+          "$path": "src/client/StarterPlayer/StarterPlayerScripts/MidnightGameplay.client.luau"
+        },
+        "$className": "StarterPlayerScripts",
+        "MidnightCityHUD": {
+          "$properties": {
+            "Disabled": false
+          },
+          "$path": "src/client/StarterPlayer/StarterPlayerScripts/MidnightCityHUD.client.luau"
+        },
+        "MidnightCtrlLock": {
+          "$properties": {
+            "Disabled": false
+          },
+          "$path": "src/client/StarterPlayer/StarterPlayerScripts/MidnightCtrlLock.client.luau"
+        }
+      },
+      "StarterCharacterScripts": {
+        "$className": "StarterCharacterScripts"
+      }
+    },
+    "ServerScriptService": {
+      "MidnightHeldDishes": {
+        "$properties": {
+          "Disabled": false
+        },
+        "$path": "src/server/ServerScriptService/MidnightHeldDishes.server.luau"
+      },
+      "MidnightCityModules": {
+        "Inventory": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Inventory.luau"
+        },
+        "Catalog": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Catalog.luau"
+        },
+        "StyleService": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/StyleService.luau"
+        },
+        "City": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/City.luau"
+        },
+        "ShopSaves": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/ShopSaves.luau"
+        },
+        "Courier": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Courier.luau"
+        },
+        "$className": "Folder",
+        "ShopService": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/ShopService.luau"
+        },
+        "PreparedMeals": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/PreparedMeals.luau"
+        },
+        "CustomerFlow": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/CustomerFlow.luau"
+        },
+        "Profiles": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Profiles.luau"
+        },
+        "MealBundles": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/MealBundles.luau"
+        },
+        "Experience": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Experience.luau"
+        },
+        "Leaderboards": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Leaderboards.luau"
+        },
+        "Transit": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Transit.luau"
+        },
+        "Quests": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/Quests.luau"
+        },
+        "WorkerVisuals": {
+          "$path": "src/server/ServerScriptService/MidnightCityModules/WorkerVisuals.luau"
+        },
+        "$path": "assets/ServerScriptService/MidnightCityModules.rbxm"
+      },
+      "$className": "ServerScriptService",
+      "MidnightCityServer": {
+        "$properties": {
+          "Disabled": false
+        },
+        "$path": "src/server/ServerScriptService/MidnightCityServer.server.luau"
+      }
+    },
+    "ReplicatedStorage": {
+      "MidnightStyle": {
+        "StyleCatalog": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/StyleCatalog.luau"
+        },
+        "FoodFactory": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/FoodFactory.luau"
+        },
+        "FoodDetails": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/FoodDetails.luau"
+        },
+        "RecipeCatalog": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/RecipeCatalog.luau"
+        },
+        "$className": "Folder",
+        "StyleRenderer": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/StyleRenderer.luau"
+        },
+        "MonetizationConfig": {
+          "$path": "src/shared/ReplicatedStorage/MidnightStyle/MonetizationConfig.luau"
+        }
+      },
+      "MidnightState": {
+        "$path": "assets/ReplicatedStorage/MidnightState.rbxm"
+      },
+      "MidnightNetwork": {
+        "$path": "assets/ReplicatedStorage/MidnightNetwork.rbxm"
+      },
+      "MidnightIcons": {
+        "$path": "assets/ReplicatedStorage/MidnightIcons.rbxm"
+      },
+      "MidnightFeedback": {
+        "$path": "assets/ReplicatedStorage/MidnightFeedback.rbxm"
+      },
+      "$className": "ReplicatedStorage"
+    }
+  }
+}

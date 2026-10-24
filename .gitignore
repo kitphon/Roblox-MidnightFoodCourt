@@ -1,0 +1,23 @@
+/.tools/
+/.sync/
+*.luau.sync-tmp
+/build/
+/.codex-preflight/
+/work/
+/studio-export/connection.json
+__pycache__/
+*.pyc
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxl.autosave
+*.rbxlx.autosave
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+# Retain dated text evidence, exclude generated legacy code and screenshots.
+/outputs/**
+!/outputs/**/
+!/outputs/**/report.md
+!/outputs/**/REPORT.md
