@@ -47,11 +47,18 @@ local promotionRank=text(promotion,"Rank","",8,31,344,24,15,C.white)
 local promotionUntil=0
 local lastShop,lastLevel,lastServed,lastNext,lastStars
 local cooking=box("CookingSkill",300,348,360,78);cooking.Visible=false
-local cookTitle=text(cooking,"Action","TOSS / FLIP / POUR",8,3,250,22,14,C.gold)
+local cookTitle=text(cooking,"Action","PRESS F / TAP IN THE GOLD ZONE",8,3,344,22,14,C.gold)
 local track=Instance.new("Frame");track.Name="TimingTrack";track.Position=UDim2.fromOffset(12,33);track.Size=UDim2.fromOffset(220,20);track.BackgroundColor3=Color3.fromRGB(52,78,79);track.BorderSizePixel=0;track.ClipsDescendants=true;track.Parent=cooking;corner(track)
 local zone=Instance.new("Frame");zone.Name="PerfectZone";zone.Size=UDim2.fromScale(.15,1);zone.BackgroundColor3=C.gold;zone.BorderSizePixel=0;zone.Parent=track
 local marker=Instance.new("Frame");marker.Name="TimingMarker";marker.Size=UDim2.fromOffset(4,24);marker.BackgroundColor3=C.white;marker.BorderSizePixel=0;marker.Parent=track
-local hit=button(cooking,"TimingAction","TOSS [F]",242,30,108,36,function() send("CookSkill") end)
+local visibleCookingPhase=0
+local lastTimingInput=0
+local function timingAction()
+ if state:GetAttribute("Cooking")=="" or state:GetAttribute("Phase")~="Playing" then return end
+ local now=workspace:GetServerTimeNow();if now-lastTimingInput<.12 then return end;lastTimingInput=now
+ send("CookSkill",string.format("%.4f",visibleCookingPhase))
+end
+local hit=button(cooking,"TimingAction","TOSS [F]",242,30,108,36,timingAction)
 local result=text(cooking,"Quality","Hit the gold zone!",8,56,220,18,12,C.mint)
 local customer=box("CustomerType",300,115,360,28)
 local customerText=text(customer,"Title","",6,2,348,26,13,C.mint)
@@ -62,9 +69,9 @@ button(guide,"SkipTraining","Skip",174,80,72,24,function() send("TutorialSkip") 
 local steps={
  {"1 / 5 • OPEN YOUR SHOP","Walk to the golden bell and open your shop.","StartShift"},
  {"2 / 5 • COOK AN ORDER","Follow the dish icon to its cooking station and interact.",""},
- {"3 / 5 • PERFECT TIMING","While cooking, tap the action button or press F when the marker reaches gold.",""},
+ {"3 / 5 • PRESS F IN GOLD","Watch the moving white marker. Press F or tap the action button once inside the gold zone. This practice try cannot fail.",""},
  {"4 / 5 • SERVE YOUR GUEST","Carry your finished dish to the serving counter.","Serve"},
- {"5 / 5 • YOUR FIRST UPGRADE","Kitchen > Upgrades: purchase an upgrade with Shop funds.",""}
+ {"5 / 5 • YOUR FIRST UPGRADE","Go to the Upgrade Desk in your backroom. Buy an upgrade with Shop funds.",""}
 }
 -- Local prompts target a specific teammate; the server validates every transfer.
 local dishPrompts={}
@@ -137,6 +144,9 @@ RS.MidnightFeedback.OnClientEvent:Connect(function(cue,score)
  if cue=="Perfect" or cue=="Good" or cue=="Fair" or cue=="Poor" then
   feedbackText.Text=string.upper(cue).." • "..tostring(score or 0).."/100";feedbackUntil=workspace:GetServerTimeNow()+1.8
   feedback.BackgroundColor3=cue=="Perfect" and Color3.fromRGB(83,62,29) or C.bg;sound(cue)
+ elseif cue=="TrainingGrace" then
+  feedbackText.Text="PRACTICE COMPLETE • GOOD 70/100";feedbackUntil=workspace:GetServerTimeNow()+3
+  feedback.BackgroundColor3=Color3.fromRGB(31,82,70);sound("Good")
  elseif cue=="SaleBreakdown" and type(score)=="table" then
   local label=score.Kind=="Reviewer" and "Reviewer" or score.Kind=="Regular" and "Regular" or score.Kind=="Party" and "Party" or "Customer"
   saleParts.Text="Food $"..score.FoodValue.." + "..label.." bonus $"..score.Bonus
@@ -150,37 +160,58 @@ RS.MidnightFeedback.OnClientEvent:Connect(function(cue,score)
 end)
 CAS:BindActionAtPriority("KitchenTiming",function(_,phase)
  if state:GetAttribute("Cooking")~="" and state:GetAttribute("Phase")=="Playing" then
-  if phase==Enum.UserInputState.Begin then send("CookSkill") end
+  if phase==Enum.UserInputState.Begin then timingAction() end
   return Enum.ContextActionResult.Sink
  end
  return Enum.ContextActionResult.Pass
 end,false,2500,Enum.KeyCode.F,Enum.KeyCode.ButtonX)
+-- Some keyboard layouts/controllers can have a higher-priority action consume ContextActionService.
+-- InputBegan provides a debounced fallback; timingAction prevents a duplicate request in the same frame.
+UIS.InputBegan:Connect(function(input)
+ if input.KeyCode==Enum.KeyCode.F then timingAction() end
+end)
 local lastMotion
 Run.RenderStepped:Connect(function()
  local now=workspace:GetServerTimeNow();local size=workspace.CurrentCamera.ViewportSize;scale.Scale=math.min(size.X/960,size.Y/640)
  local sideScale=math.max(scale.Scale,.01)
  if UIS.TouchEnabled then layoutTouch(size) end
  local management=player.PlayerGui:FindFirstChild("MidnightManagement")
- local kitchenButton
- if management then
-  for _,child in management:GetChildren() do
-   if child:IsA("TextButton") and child.Text:find("KITCHEN",1,true) then kitchenButton=child;break end
-  end
- end
- local buttonTop=kitchenButton and kitchenButton.AbsolutePosition.Y or size.Y-70
- local guideX=kitchenButton and (kitchenButton.AbsolutePosition.X-root.AbsolutePosition.X)/sideScale or (960-size.X/sideScale)/2+16/sideScale
- local guideY=(buttonTop-16-root.AbsolutePosition.Y)/sideScale-guide.Size.Y.Offset
+ local kitchenButton=management and management:FindFirstChild("KitchenButton")
+ -- Touch keeps the guide's bottom at the old bottom-left button height; the button itself moved above jump.
+ local buttonTop=kitchenButton and not UIS.TouchEnabled and kitchenButton.AbsolutePosition.Y or size.Y-70
+ -- Phones in landscape shrink the canvas to ~.5; enlarge the guide so its text stays readable (~.71 effective).
+ local guideScale=UIS.TouchEnabled and size.X>=size.Y and math.clamp(.71/sideScale,1,1.35) or 1
+ local leftEdge=(960-size.X/sideScale)/2+16/sideScale
+ -- On touch the KITCHEN button sits bottom-right, so the guide keeps the left edge instead of following it.
+ local guideX=kitchenButton and not UIS.TouchEnabled and (kitchenButton.AbsolutePosition.X-root.AbsolutePosition.X)/sideScale or leftEdge
+ local guideY=(buttonTop-16-root.AbsolutePosition.Y)/sideScale-guide.Size.Y.Offset*guideScale
  guide.Position=UDim2.fromOffset(guideX,guideY)
+ -- Short landscape screens (phones): if the guide would cover the FRONT / BACK stock card, sit beside it instead.
+ -- Uses the 960x640 canvas both HUD layers share (MidnightCityHUD: StockCard at leftEdge,325, 148x134 scaled .9),
+ -- because AbsolutePosition across ScreenGuis is unreliable under device emulation.
+ local hud=player.PlayerGui:FindFirstChild("MidnightHUD");local stockCard=hud and hud:FindFirstChild("StockCard",true)
+ if stockCard and stockCard.Visible and guideY<325+134*.9+8/sideScale then
+  guide.Position=UDim2.fromOffset(leftEdge+148*.9+12/sideScale,guideY)
+ end
  if UIS.TouchEnabled then
   local portrait=size.X<size.Y
   local gs=guide:FindFirstChild("MobileGuideScale") or Instance.new("UIScale",guide);gs.Name="MobileGuideScale"
   if portrait then
    guide.Parent=gui;gs.Scale=.9;guide.Position=UDim2.fromOffset(16,math.max(16,size.Y-((state:GetAttribute("Cooking")~="" and state:GetAttribute("Phase")=="Playing") and 124 or 24)-(kitchenButton and kitchenButton.AbsoluteSize.Y or 46)-16-112*.9))
-  else guide.Parent=root;gs.Scale=1 end
+  else guide.Parent=root;gs.Scale=guideScale end
   if kitchenButton then
    local active=state:GetAttribute("Cooking")~="" and state:GetAttribute("Phase")=="Playing"
-   kitchenButton.AnchorPoint=active and not portrait and Vector2.new(0,0) or Vector2.new(0,1)
-   kitchenButton.Position=active and (portrait and UDim2.new(0,16,1,-124) or UDim2.fromOffset(16,16)) or UDim2.new(0,16,1,-24)
+   -- Idle: bottom-right just above the jump button (left 40% is Roblox's thumbstick zone; the bottom row
+   -- is left for the task card). Jump is 70px at (1,-95,1,-90) on small screens, 120px at (1,-170,1,-210)
+   -- otherwise. Cooking keeps the old spots.
+   local small=math.min(size.X,size.Y)<=500
+   if active then
+    kitchenButton.AnchorPoint=portrait and Vector2.new(0,1) or Vector2.new(0,0)
+    kitchenButton.Position=portrait and UDim2.new(0,16,1,-124) or UDim2.fromOffset(16,16)
+   else
+    kitchenButton.AnchorPoint=Vector2.new(1,1)
+    kitchenButton.Position=UDim2.new(1,-16,1,small and -102 or -222)
+   end
   end
  end
  local pg=player.PlayerGui;local manage=pg:FindFirstChild("MidnightManagement");local style=pg:FindFirstChild("MidnightStyleShop")
@@ -228,20 +259,44 @@ Run.RenderStepped:Connect(function()
  if cooking.Visible then
   local duration=state:GetAttribute("CookDuration") or 4;local ending=state:GetAttribute("CookEnd") or now
   local fraction=math.clamp(1-(ending-now)/duration,0,1)
+  visibleCookingPhase=fraction
   marker.Position=UDim2.fromScale(fraction,0);zone.Position=UDim2.fromScale((state:GetAttribute("SkillTarget") or .65)-.075,0)
   local action=recipe and (recipe.Shape=="Cup" or recipe.Shape=="Mug" or recipe.Shape=="Soda") and "POUR" or recipe and recipe.Shape=="Burger" and "FLIP" or "TOSS"
-  cookTitle.Text=action.." • HIT THE GOLD ZONE";hit.Text=UIS.TouchEnabled and ("TAP "..action) or (action.." [F]");hit.Active=not state:GetAttribute("SkillHit");hit.BackgroundColor3=hit.Active and C.mint or Color3.fromRGB(75,91,90)
-  result.Text=state:GetAttribute("SkillHit") and (string.upper(state:GetAttribute("CookQuality") or "Poor").." • "..tostring(state:GetAttribute("CookScore") or 0).."/100") or "Closer to gold = higher score"
+  local target=state:GetAttribute("SkillTarget") or .65
+  local inGold=math.abs(fraction-target)<=.075
+  local training=(state:GetAttribute("TutorialStep") or 1)==3
+  cookTitle.Text=training and "PRESS F / TAP WHEN WHITE REACHES GOLD" or (action.." • HIT THE GOLD ZONE")
+  hit.Text=UIS.TouchEnabled and (inGold and "TAP NOW!" or ("TAP "..action)) or (inGold and "PRESS F NOW!" or (action.." [F]"));hit.Active=not state:GetAttribute("SkillHit")
+  hit.BackgroundColor3=hit.Active and (inGold and C.gold or C.mint) or Color3.fromRGB(75,91,90)
+  hit.Size=inGold and UDim2.fromOffset(112,40) or UDim2.fromOffset(108,36)
+  result.Text=state:GetAttribute("SkillHit") and (string.upper(state:GetAttribute("CookQuality") or "Poor").." • "..tostring(state:GetAttribute("CookScore") or 0).."/100") or training and "Practice try • No penalty if you miss" or "Closer to gold = higher score"
   -- Local wrist movement gives cooking feedback without needing uploaded animations.
   local char=player.Character;local arm=char and (char:FindFirstChild("RightUpperArm") or char:FindFirstChild("Torso"))
   local joint=arm and (arm:FindFirstChild("RightShoulder") or arm:FindFirstChild("Right Shoulder"))
   if joint and joint:IsA("Motor6D") then joint.Transform=CFrame.Angles(-.45+math.sin(now*10)*.2,0,.2);lastMotion=joint end
  elseif lastMotion and lastMotion.Parent then lastMotion.Transform=CFrame.identity;lastMotion=nil end
  local phase=state:GetAttribute("Phase");local step=state:GetAttribute("TutorialStep") or 1
- guide.Visible=shop~=nil and step<=5 and phase~="Won" and phase~="Lost"
- if guide.Visible then guideTitle.Text=steps[step][1];guideText.Text=steps[step][2] end
- local target=guide.Visible and steps[step][3] or ""
- if step==2 and recipe==nil then target=Recipes.Station(state:GetAttribute("Order") or "") or "" end
+ -- One-time refill lesson: shown the first time the active order's front stock is empty while the backroom has more.
+ local order=state:GetAttribute("Order") or "";local kitSlot=Recipes.Slot(order)
+ local carryingRefill=(state:GetAttribute("SupplyFood") or "")~="" and state:GetAttribute("SupplyMode")~="Delivery"
+ local refillLesson=shop~=nil and phase=="Playing" and kitSlot~=nil and not state:GetAttribute("RefillTaught") and (state:GetAttribute("Event") or "")==""
+  and (carryingRefill or (state:GetAttribute("OrderUnavailable") and (state:GetAttribute("Back"..({"Noodles","Rice","Tea"})[kitSlot]) or 0)>0))
+ guide.Visible=shop~=nil and (refillLesson or step<=5) and phase~="Won" and phase~="Lost"
+ guide.SkipTraining.Visible=not refillLesson
+ local target=""
+ if refillLesson then
+  local letter=string.char(64+(Recipes.CookingSlot(order) or kitSlot))
+  if carryingRefill then
+   guideTitle.Text="NEW • REFILL 2 / 2";guideText.Text="Carry the crate to STATION "..letter.." and interact to refill. Your guest waits while you refill."
+   target=Recipes.Station(order) or ""
+  else
+   guideTitle.Text="NEW • REFILL 1 / 2";guideText.Text="Front stock is empty! Take a crate from the glowing shelf in the backroom. Your guest waits while you refill."
+   target=({"StockNoodles","StockRice","StockTea"})[kitSlot]
+  end
+ elseif guide.Visible then
+  guideTitle.Text=steps[step][1];guideText.Text=steps[step][2];target=steps[step][3]
+  if step==2 and recipe==nil then target=Recipes.Station(order) or "" end
+ end
  highlight.Adornee=shop and shop:FindFirstChild(target);highlight.Enabled=gui.Enabled and highlight.Adornee~=nil
  updateDishPrompts(gui.Enabled and shop~=nil and (state:GetAttribute("Held") or "")~="" and (state:GetAttribute("Cooking") or "")=="")
  customer.Visible=shop~=nil and phase=="Playing" and state:GetAttribute("Event")=="" and (state:GetAttribute("CustomerStage")=="Ordering" or state:GetAttribute("CustomerStage")=="Arriving")
@@ -256,4 +311,96 @@ Run.RenderStepped:Connect(function()
  rushText.Text="RUSH "..rushSeconds.."s • POPULARITY "..tostring(state:GetAttribute("Popularity") or 0).."/100"
  feedback.Visible=feedbackUntil>now and not sale.Visible
  if not gui.Enabled then highlight.Enabled=false;pingHighlight.Enabled=false end
+end)
+-- Storefront chase bulbs animate locally: owned shops chase, vacant shops glow warm, blackout turns the front dark.
+task.spawn(function()
+ local palette={Color3.fromRGB(255,92,170),Color3.fromRGB(255,214,92),Color3.fromRGB(92,232,255)}
+ local warm,off=Color3.fromRGB(255,196,120),Color3.fromRGB(70,62,52)
+ local shops=workspace:WaitForChild("MidnightShops")
+ local step=0
+ while true do
+  step+=1
+  local camera=workspace.CurrentCamera.CFrame.Position
+  for _,model in shops:GetChildren() do
+   local front=model:FindFirstChild("Storefront")
+   -- Only animate shops near the camera; far fronts keep their last colours (cheaper on phones).
+   local near=front and (model:GetPivot().Position-camera).Magnitude<220
+   if near then
+    local power=model:GetAttribute("StorefrontPower")~=false;local live=model:GetAttribute("StorefrontLive")==true
+    local center,size=front:GetAttribute("AwningCenter"),front:GetAttribute("AwningSize")
+    local offset=center and size and workspace.CurrentCamera.CFrame.Position-center
+    local under=offset and math.abs(offset.X)<size.X/2 and math.abs(offset.Y)<size.Y/2 and math.abs(offset.Z)<size.Z/2
+    for _,p in front:GetChildren() do
+     local i=p:GetAttribute("ChaseIndex")
+     local material=power and Enum.Material.Neon or Enum.Material.SmoothPlastic
+     if p.Name=="AwningSlat" or p.Name=="AwningValance" then
+      local fade=under and .85 or 0;if p.LocalTransparencyModifier~=fade then p.LocalTransparencyModifier=fade end
+     elseif i then
+      local color=not power and off or live and palette[(i+step)%#palette+1] or warm
+      if p.Material~=material then p.Material=material end
+      if p.Color~=color then p.Color=color end
+     elseif p.Name=="NeonFrame" and p.Material~=material then p.Material=material end
+    end
+   end
+  end
+  task.wait(.15)
+ end
+end)
+-- Ambient citizens: local poses keep the server's route/root authoritative.
+-- Static rest offsets survive streaming; only nearby actors update at 20 Hz.
+task.spawn(function()
+ local citizens=workspace:WaitForChild("MidnightCity"):WaitForChild("Citizens")
+ local tracked={}
+ local function track(model)
+  if not model:IsA("Model") or tracked[model] then return end
+  local record={parts={},connections={},seed=model:GetAttribute("CitizenSeed") or 1,phase=0,blend=0}
+  tracked[model]=record
+  local function add(p)
+   if p:IsA("BasePart") and p:GetAttribute("CitizenRest") then record.parts[p]={rest=p:GetAttribute("CitizenRest"),group=p:GetAttribute("CitizenGroup")} end
+  end
+  for _,p in model:GetChildren() do add(p) end
+  table.insert(record.connections,model.ChildAdded:Connect(add))
+  table.insert(record.connections,model.ChildRemoved:Connect(function(p)record.parts[p]=nil end))
+ end
+ for _,m in citizens:GetChildren() do track(m) end
+ citizens.ChildAdded:Connect(track)
+ citizens.ChildRemoved:Connect(function(m)
+  local r=tracked[m];if r then for _,c in r.connections do c:Disconnect() end;tracked[m]=nil end
+ end)
+ local elapsed=0
+ game:GetService("RunService").RenderStepped:Connect(function(dt)
+  elapsed+=dt;if elapsed<.05 then return end
+  local step=elapsed;elapsed=0
+  local camera=workspace.CurrentCamera;if not camera then return end
+  local now=os.clock()
+  for model,r in tracked do
+   local root=model.PrimaryPart
+   if not root then continue end
+   local cf=root.CFrame;local pos=cf.Position
+   local speed=r.last and (pos-r.last).Magnitude/math.max(step,.001) or 0;r.last=pos
+   local nearby=(camera.CFrame.Position-pos).Magnitude<110
+   if not nearby then
+    if r.active then for p,v in r.parts do if p.Parent then p.CFrame=cf*v.rest end end end
+    r.active=false;r.blend=0;continue
+   end
+   r.active=true;r.phase+=math.min(speed,10)*step*1.35
+   r.blend+=(math.clamp(speed/5,0,1)-r.blend)*math.min(1,step*9)
+   local stride=math.sin(r.phase)*.48*r.blend
+   local idle=1-r.blend;local breath=math.sin(now*1.8+r.seed)*.035*idle
+   local look=math.sin(now*.55+r.seed*1.7)*.22*idle
+   local bob=math.abs(math.sin(r.phase))*.045*r.blend
+   local function joint(pivot,rotation) return CFrame.new(pivot)*rotation*CFrame.new(-pivot) end
+   local transforms={
+    LeftArm=joint(Vector3.new(-1.02,3.35,0),CFrame.Angles(-stride+math.sin(now+r.seed)*.04*idle,0,-.025*idle)),
+    RightArm=joint(Vector3.new(1.02,3.35,0),CFrame.Angles(stride-math.sin(now+r.seed)*.04*idle,0,.025*idle)),
+    LeftLeg=joint(Vector3.new(-.4,1.5,0),CFrame.Angles(stride,0,0)),
+    RightLeg=joint(Vector3.new(.4,1.5,0),CFrame.Angles(-stride,0,0)),
+    Head=joint(Vector3.new(0,3.4,0),CFrame.Angles(0,look,0)),Body=CFrame.identity,
+   }
+   for p,v in r.parts do if p.Parent then
+    local lift=(v.group=="LeftLeg" or v.group=="RightLeg") and 0 or breath+bob
+    p.CFrame=cf*CFrame.new(0,lift,0)*(transforms[v.group] or CFrame.identity)*v.rest
+   end end
+  end
+ end)
 end)

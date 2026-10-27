@@ -39,12 +39,12 @@ function F.Build(recipe,parent,name)
  local shape=recipe.Shape
  if recipe.Id=="NOODLES" then
   -- Open ceramic bowl: visible broth, curled noodles, meatballs and greens.
-  ball("BowlFoot",Vector3.new(1.15,.18,1.15),Vector3.new(0,.12,0),cream)
-  ball("BowlBody",Vector3.new(1.92,.65,1.92),Vector3.new(0,.39,0),Color3.fromRGB(232,239,229))
+  ball("BowlFoot",Vector3.new(1.15,.18,1.15),Vector3.new(0,.12,0),Color3.fromRGB(38,87,94))
+  ball("BowlBody",Vector3.new(1.92,.65,1.92),Vector3.new(0,.39,0),Color3.fromRGB(78,137,143))
   ball("Broth",Vector3.new(1.76,.11,1.76),Vector3.new(0,.7,0),Color3.fromRGB(151,82,36))
   for i=1,24 do
    local a=i*math.pi*2/24
-   local rim=p("CeramicRim",Vector3.new(.26,.12,.13),Vector3.new(math.cos(a)*.9,.76,math.sin(a)*.9),cream)
+   local rim=p("CeramicRim",Vector3.new(.26,.12,.13),Vector3.new(math.cos(a)*.9,.76,math.sin(a)*.9),Color3.fromRGB(43,101,108))
    rim.Rotation=Vector3.new(0,-math.deg(a)-90,0)
   end
   for strand=1,6 do
@@ -58,13 +58,13 @@ function F.Build(recipe,parent,name)
    end
   end
   for i=1,3 do ball("Meatball",Vector3.new(.29,.25,.29),Vector3.new(-.45+(i-1)*.38,.84,.46),Color3.fromRGB(173,128,91)) end
-  for i=1,3 do local leaf=ball("BokChoyLeaf",Vector3.new(.25,.09,.48),Vector3.new(.5+(i-2)*.13,.84,-.35),green);leaf.Rotation=Vector3.new(0,(i-2)*30,0) end
-  ball("EggSlice",Vector3.new(.43,.1,.34),Vector3.new(-.48,.85,-.38),cream)
-  ball("EggYolk",Vector3.new(.21,.06,.18),Vector3.new(-.48,.92,-.38),Color3.fromRGB(255,174,37))
+  for i=1,3 do local leaf=ball("BokChoyLeaf",Vector3.new(.29,.09,.5),Vector3.new(.5+(i-2)*.13,.84,-.35),Color3.fromRGB(48,128,52));leaf.Rotation=Vector3.new(0,(i-2)*30,0) end
+  ball("EggSlice",Vector3.new(.5,.1,.4),Vector3.new(-.48,.85,-.38),cream)
+  ball("EggYolk",Vector3.new(.28,.06,.24),Vector3.new(-.48,.92,-.38),Color3.fromRGB(238,141,25))
   for i=1,7 do p("Scallion",Vector3.new(.07,.035,.07),Vector3.new(math.sin(i*3)*.6,.85,math.cos(i*2)*.5),green) end
  elseif recipe.Id=="FRIED RICE" then
   -- A golden mound on a wide plate with individually visible grains.
-  ball("PlateRim",Vector3.new(2.45,.17,2.05),Vector3.new(0,.12,0),cream)
+  ball("PlateRim",Vector3.new(2.45,.17,2.05),Vector3.new(0,.12,0),Color3.fromRGB(43,101,108))
   ball("PlateWell",Vector3.new(2.12,.08,1.72),Vector3.new(0,.22,0),Color3.fromRGB(255,250,233))
   ball("FriedRiceMound",Vector3.new(1.65,.68,1.35),Vector3.new(-.08,.43,0),Color3.fromRGB(215,164,65))
   for i=1,76 do
@@ -78,8 +78,8 @@ function F.Build(recipe,parent,name)
    local a=i*2.4;local radius=.25+(i%3)*.17
    local x=math.cos(a)*radius-.08;local z=math.sin(a)*radius*.8
    local y=.43+.34*math.sqrt(1-(radius/.8)^2)+.04
-   ball("Pea",Vector3.new(.1,.1,.1),Vector3.new(x,y,z),green)
-   local carrot=p("CarrotDice",Vector3.new(.1,.08,.1),Vector3.new(-x-.1,y,z+.1),Color3.fromRGB(239,123,45));carrot.Rotation=Vector3.new(0,i*23,0)
+   ball("Pea",Vector3.new(.14,.12,.14),Vector3.new(x,y,z),Color3.fromRGB(53,130,52))
+   local carrot=p("CarrotDice",Vector3.new(.14,.1,.14),Vector3.new(-x-.1,y,z+.1),Color3.fromRGB(218,91,30));carrot.Rotation=Vector3.new(0,i*23,0)
   end
   ball("FriedEggWhite",Vector3.new(.68,.09,.59),Vector3.new(.55,.6,-.3),Color3.fromRGB(255,247,216))
   ball("FriedEggYolk",Vector3.new(.3,.12,.29),Vector3.new(.55,.69,-.3),Color3.fromRGB(255,183,37))
@@ -168,6 +168,22 @@ function F.Build(recipe,parent,name)
    p("Rice",Vector3.new(.4,.12,.56),Vector3.new(i*.56,.64,0),cream)
    p("Salmon",Vector3.new(.24,.08,.34),Vector3.new(i*.56,.74,0),Color3.fromRGB(239,135,106))
   end
+ elseif recipe.Id=="THAI TEA" then
+  -- A round takeaway cup with visible tea, milk cap and ice instead of a solid white block.
+  local function cupCylinder(n,h,d,y,c)
+   local a=p(n,Vector3.new(h,d,d),Vector3.new(0,y,0),c,Enum.PartType.Cylinder)
+   a.Rotation=Vector3.new(0,0,90);return a
+  end
+  cupCylinder("CupBase",.1,.92,.12,Color3.fromRGB(71,100,98))
+  cupCylinder("Drink",1.22,.86,.78,Color3.fromRGB(194,91,26))
+  cupCylinder("MilkCap",.16,.86,1.32,Color3.fromRGB(239,206,156))
+  cupCylinder("CupSleeve",.35,.9,.64,Color3.fromRGB(39,103,100))
+  local glass=cupCylinder("ClearCup",1.38,.94,.8,Color3.fromRGB(185,218,217));glass.Transparency=.78;glass.Material=Enum.Material.Glass
+  for i=1,4 do
+   local ice=p("IceCube",Vector3.new(.23,.15,.23),Vector3.new(math.sin(i*2)*.23,1.45,math.cos(i*2)*.23),Color3.fromRGB(199,228,229));ice.Transparency=.25;ice.Rotation=Vector3.new(0,i*35,0)
+  end
+  local lid=cupCylinder("Lid",.07,1.02,1.53,Color3.fromRGB(173,211,207));lid.Transparency=.5
+  p("Straw",Vector3.new(.09,.85,.09),Vector3.new(.2,1.85,0),Color3.fromRGB(169,53,60)).Rotation=Vector3.new(0,0,-8)
  elseif shape=="Cup" or shape=="Mug" or shape=="Soda" then
   p("CupBase",Vector3.new(.92,1.45,.92),Vector3.new(0,.76,0),cream)
   p("Drink",Vector3.new(.82,1.05,.94),Vector3.new(0,.7,-.03),color)

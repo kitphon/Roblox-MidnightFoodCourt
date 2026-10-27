@@ -36,9 +36,9 @@ local function dropHeld(player,shop)
 end
 function Service.Sync(shop)
  if not shop then return end
- PreparedMeals.Update(shop)
  Experience.Prepare(shop)
  Style.Apply(shop)
+ PreparedMeals.Update(shop)
  Experience.Visuals(shop)
  shop.Model:SetAttribute("Open",shop.Phase=="Playing")
  local data=shopData(shop)
@@ -72,7 +72,15 @@ function Service.SyncPlayer(player)
 end
 local function updateOwnerBillboard(shop)
  local sign=shop.Model:FindFirstChild("MIDNIGHT • KITCHEN")
- if sign then local g=sign:FindFirstChildOfClass("SurfaceGui");if g then local t=g:FindFirstChildOfClass("TextLabel");if t then t.Text=shop.Owner and (shop.Owner.DisplayName.."'S KITCHEN") or ("KITCHEN "..shop.Id.." / VACANT") end end end
+ if sign then local g=sign:FindFirstChildOfClass("SurfaceGui");if g then local t=g:FindFirstChildOfClass("TextLabel");if t then t.Text=shop.Owner and (shop.Owner.DisplayName:upper().."'S KITCHEN") or ("KITCHEN "..shop.Id.." / VACANT") end end end
+ shop.Model:SetAttribute("StorefrontLive",shop.Owner~=nil)
+ local actions=shop.Model:FindFirstChild("WorldActions")
+ local crew=actions and actions:FindFirstChild("CrewJoin")
+ local prompt=crew and crew:FindFirstChildWhichIsA("ProximityPrompt",true)
+ if prompt then
+  prompt.Enabled=shop.Owner~=nil and count(shop)<4 and not shop.Locked
+  prompt.ObjectText=shop.Owner and (shop.Owner.DisplayName.."'s crew • "..count(shop).."/4") or "No crew yet"
+ end
 end
 local function characterLook(player)
  local d=Profiles.Get(player);local char=player.Character
@@ -109,12 +117,26 @@ local function theme(shop)
   end
   if p:IsA("BasePart") and p.Name=="CeilingLamp" then
    local l=p:FindFirstChildOfClass("PointLight")
-   if l then l.Color=item and Color3.fromRGB(unpack(item.Color)):Lerp(Color3.new(1,1,1),.75) or Color3.fromRGB(255,213,164) end
+   if l then l.Color=item and Color3.fromRGB(unpack(item.Color)):Lerp(Color3.new(1,1,1),.75) or Color3.fromRGB(255,213,164):Lerp(Color3.fromRGB(255,230,201),.5) end
   end
  end
 end
 local function lights(shop,on)
+ if shop.ShadowLightLevels then
+  for light,brightness in pairs(shop.ShadowLightLevels) do if light.Parent then light.Brightness=brightness end end
+  shop.ShadowLightLevels=nil
+ end
  for _,v in ipairs(shop.Model:GetDescendants()) do if v:IsA("PointLight") and v.Name=="ShopLight" then v.Enabled=on end end
+ shop.Model:SetAttribute("StorefrontPower",on)
+end
+local function shadowLights(shop,now)
+ shop.ShadowLightLevels=shop.ShadowLightLevels or {}
+ -- Slow, partial dimming on the existing shop tick; no independent flashing task.
+ local factor=.35+.65*(.5+.5*math.sin((now-shop.EventBegan)*math.pi*1.5))
+ for _,v in ipairs(shop.Model:GetDescendants()) do if v:IsA("PointLight") and v.Name=="ShopLight" then
+  if shop.ShadowLightLevels[v]==nil then shop.ShadowLightLevels[v]=v.Brightness end
+  v.Enabled=true;v.Brightness=shop.ShadowLightLevels[v]*factor
+ end end
 end
 local function removeCustomer(shop) CustomerFlow.Clear(shop) end
 local function customer(shop,shadow) CustomerFlow.Shadow(shop,shadow) end
@@ -238,7 +260,7 @@ local function reward(shop,actor,quality,score)
 end
 local function tryServe(shop,actor,dish,quality,score)
  if shop.Phase~="Playing" or shop.CustomerStage~="Ordering" or dish=="" then return end
- if shop.Event=="SHADOW" then strike(shop);if shop.Phase=="Playing" then clearEvent(shop);nextOrder(shop) end
+ if shop.Event=="SHADOW" then if actor then tell(actor,"Banish the shadow behind the radio first") end;return
  else
   local accepted,complete,finalQuality,finalScore=Bundles.Accept(shop,dish,quality,score)
   if not accepted then strike(shop);if shop.Phase=="Playing" then nextOrder(shop) end
@@ -258,7 +280,7 @@ function Service.CloseShop(player,reason,takeaway)
  if shop.Phase=="Closed" then return true,"Shop is already closed" end
  if shop.Phase=="Playing" then shop.Time=math.max(0,math.ceil(shop.Ends-os.clock())) end
  shop.PartyRemaining=0
- shop.Phase="Closed";shop.Token+=1;shop.CloseReason=reason or "TEMPORARILY CLOSED";shop.Combo=0;shop.Event="";lights(shop,true)
+ shop.Phase="Closed";shop.Token+=1;shop.CloseReason=reason or "TEMPORARILY CLOSED";shop.Combo=0;shop.Event="";lights(shop,true);customer(shop,false)
  for member in pairs(shop.Members) do
   local data=personal(member)
   Inventory.CancelCooking(member,shop)
@@ -327,6 +349,13 @@ local function cook(player,shop,food)
  if shop.Phase~="Playing" or shop.CustomerStage~="Ordering" or shop.Order=="" or pd.Cooking~="" or pd.Held~="" then return end
  if Service.OrderUnavailable(shop) then tell(player,"Menu unavailable. Tell the customer at the serving counter or refill ingredients.");return end
  if shop.Event=="BLACKOUT" then tell(player,"Restore power first");return end
+ -- Crew lock: one cook per current order, so a teammate can't make a duplicate that becomes a wrong-dish strike.
+ if food==shop.Order then
+  for member in pairs(shop.Members) do
+   local other=member~=player and personal(member)
+   if other and (other.Cooking==food or other.Held==food) then tell(player,member.DisplayName.." is already making "..Recipes.Get(food).Name.." for this order");return end
+  end
+ end
  if not Inventory.Consume(shop,food) then
   if Inventory.Available(shop,food)<=0 and not mealInProgress(shop,food) then Service.CloseShop(shop.Owner,"OUT OF STOCK")
   else tell(player,"Front stock empty. Get a crate from the backroom.") end
@@ -338,13 +367,16 @@ local function cook(player,shop,food)
  duration=math.max(.7,duration)
  pd.Cooking=food;pd.CookEnd=workspace:GetServerTimeNow()+duration;pd.CookDuration=duration
  pd.SkillHit=false;pd.SkillTarget=Experience.NewTimingTarget(pd.LastSkillTarget);pd.LastSkillTarget=pd.SkillTarget;pd.CookQuality="Poor";pd.CookScore=0;pd.HeldQuality=nil;pd.HeldScore=nil
+ local trainingGrace=Experience.Training(shop)
  Experience.Tutorial(player,"Cook")
  local state=player:FindFirstChild("MidnightState");if state then state:SetAttribute("CookDuration",duration) end
  feedback:FireClient(player,"Cook");Service.Sync(shop)
  local token=shop.Token;local cookEnd=pd.CookEnd
  task.delay(duration,function()
   if personal(player)==pd and pd.ShopId==shop.Id and pd.CookEnd==cookEnd and pd.Cooking==food and shop.Token==token and shop.Phase=="Playing" then
-   Experience.Tutorial(player,"Skill");pd.CookingConsumed="";pd.Held=food;pd.HeldQuality=pd.CookQuality or "Poor";pd.HeldScore=pd.CookScore or 0;if not pd.SkillHit then feedback:FireClient(player,"Poor",0) end;pd.Cooking="";pd.CookEnd=0;feedback:FireClient(player,"Ready");Service.Sync(shop)
+   if not pd.SkillHit and trainingGrace then pd.CookQuality="Good";pd.CookScore=70;feedback:FireClient(player,"TrainingGrace",70)
+   elseif not pd.SkillHit then feedback:FireClient(player,"Poor",0) end
+   Experience.Tutorial(player,"Skill");pd.CookingConsumed="";pd.Held=food;pd.HeldQuality=pd.CookQuality or "Poor";pd.HeldScore=pd.CookScore or 0;pd.Cooking="";pd.CookEnd=0;feedback:FireClient(player,"Ready");Service.Sync(shop)
   end
  end)
 end
@@ -387,14 +419,257 @@ local function refreshDecor(shop)
  local function p(name,size,pos,color)
   local a=Instance.new("Part");a.Name=name;a.Size=size;a.Position=pos;a.Color=color;a.Material=Enum.Material.Wood;a.Anchored=true;a.Parent=folder;return a
  end
+ if (d.Upgrades.Space or 0)>0 then
+  -- Expanded dining owns its table layout. Decor becomes planters inside it,
+  -- rather than creating a second row of tables outside the upgraded room.
+  for i=1,d.Upgrades.Decor do
+   local width=d.Upgrades.Space*7
+   local pos=floor.Position+Vector3.new(floor.Size.X/2+1.3+(i-1)*(width-2.6)/2,1,7.5)
+   p("DiningPlanter",Vector3.new(1.6,1,1.6),pos,Color3.fromRGB(99,73,52))
+   local leaves=p("DiningPlant",Vector3.new(1.6,1.4,1.6),pos+Vector3.new(0,1.1,0),Color3.fromRGB(72,132,82));leaves.Shape=Enum.PartType.Ball;leaves.CanCollide=false
+  end
+  return
+ end
  for i=1,d.Upgrades.Decor do
-  local origin=Vector3.new(floor.Position.X+22,ground,floor.Position.Z+(i-2)*5)
+  local sideOffset=floor.Size.X/2+(d.Upgrades.Space or 0)*7+6
+  local origin=Vector3.new(floor.Position.X+sideOffset,ground,floor.Position.Z+(i-2)*5)
   p("TableLeg",Vector3.new(.5,2,.5),origin+Vector3.new(0,1,0),Color3.fromRGB(74,62,50))
   p("TableTop",Vector3.new(3.5,.25,3),origin+Vector3.new(0,2.125,0),Color3.fromRGB(173,127,78))
   for _,x in ipairs({-2.7,2.7}) do
    p("Chair",Vector3.new(1.7,1.3,1.7),origin+Vector3.new(x,.65,0),Color3.fromRGB(62,104,97))
   end
  end
+end
+
+local function refreshExpansion(shop)
+ local old=shop.Model:FindFirstChild("DiningExpansion");if old then old:Destroy() end
+ local d=shopData(shop);local level=d and (d.Upgrades.Space or 0) or 0
+ local floor=shop.Model.ShopFloor
+ -- Keep the decorative right-side tree row clear of the enlarged roof/seats.
+ for _,tree in shop.Model:GetChildren() do
+  if tree:IsA("BasePart") and (tree.Name=="TreeTrunk" or tree.Name=="TreeCrown" or tree:GetAttribute("TreeRowDecor")) then
+   local base=tree:GetAttribute("DiningTreeBaseCFrame") or tree.CFrame
+   if base.Position.X>floor.Position.X+floor.Size.X/2+10 then
+    tree:SetAttribute("DiningTreeBaseCFrame",base)
+    local shift=level>0 and math.max(0,floor.Position.X+floor.Size.X/2+level*7+6.5-base.Position.X) or 0
+    tree.CFrame=base+Vector3.new(shift,0,0)
+   end
+  end
+ end
+ local rightWall=shop.Model:FindFirstChild("RightWall")
+ if rightWall then
+  if rightWall:GetAttribute("ExpansionBaseTransparency")==nil then rightWall:SetAttribute("ExpansionBaseTransparency",rightWall.Transparency) end
+  rightWall.Transparency=level>0 and 1 or rightWall:GetAttribute("ExpansionBaseTransparency");rightWall.CanCollide=level<=0
+ end
+ if level<=0 then return end
+ local folder=Instance.new("Folder");folder.Name="DiningExpansion";folder.Parent=shop.Model
+ local width=level*7
+ local center=floor.Position+Vector3.new(floor.Size.X/2+width/2,0,0)
+ local function part(name,size,pos,color,material)
+  local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=pos;p.Color=color;p.Material=material or Enum.Material.WoodPlanks;p.Anchored=true;p.Parent=folder;return p
+ end
+ part("ExpandedFloor",Vector3.new(width,1,floor.Size.Z),Vector3.new(center.X,floor.Position.Y,center.Z),floor.Color,floor.Material)
+ local roof=shop.Model.Roof
+ local canopyCenter=Vector3.new(roof.Position.X+roof.Size.X/2+width/2,roof.Position.Y,roof.Position.Z)
+ part("Canopy",Vector3.new(width,roof.Size.Y,roof.Size.Z),canopyCenter,roof.Color,roof.Material)
+ local floorTop=floor.Position.Y+floor.Size.Y/2
+ local postHeight=roof.Position.Y-roof.Size.Y/2-floorTop
+ for _,x in ipairs({center.X-width/2+.35,center.X+width/2-.35}) do
+  for _,z in ipairs({center.Z-floor.Size.Z/2+.35,center.Z+floor.Size.Z/2-.35}) do part("Post",Vector3.new(.45,postHeight,.45),Vector3.new(x,floorTop+postHeight/2,z),Color3.fromRGB(72,117,108),Enum.Material.Metal) end
+ end
+ for i=1,level do
+  local x=floor.Position.X+floor.Size.X/2-3.5+i*7
+  part("DiningTable",Vector3.new(3.8,.3,3),Vector3.new(x,floor.Position.Y+2.2,floor.Position.Z),Color3.fromRGB(177,126,76))
+  part("TableLeg",Vector3.new(.45,2.2,.45),Vector3.new(x,floor.Position.Y+1.1,floor.Position.Z),Color3.fromRGB(60,55,50),Enum.Material.Metal)
+  for _,z in ipairs({-2.5,2.5}) do part("DiningSeat",Vector3.new(2,1.2,1.5),Vector3.new(x,floor.Position.Y+1,floor.Position.Z+z),Color3.fromRGB(68,119,107)) end
+ end
+end
+
+-- Built from maintained source so every plot uses the same expanded layout.
+local function buildBackroom(shop)
+ local model=shop.Model;local origin=model.ShopFloor.Position
+ local stockFront,stockDepth,officeDepth=10,11,14
+ local dividerZ=stockFront+stockDepth
+ local backZ=dividerZ+officeDepth
+ local backCenter=(stockFront+backZ)/2
+ local rackScale=.95
+ -- Keep a small gap behind the scaled shelf at the INGREDIENTS divider wall.
+ local rackZ=dividerZ-.25-.15-1.85*rackScale
+ local function resize(name,size,offset)
+  local p=model:FindFirstChild(name);if p then p.Size=size;p.Position=origin+offset end
+ end
+ resize("BackroomFloor",Vector3.new(32,1,stockDepth+officeDepth),Vector3.new(0,0,backCenter))
+ resize("BackroomRoof",Vector3.new(33,1,stockDepth+officeDepth+1),Vector3.new(0,12,backCenter))
+ resize("BackroomLeft",Vector3.new(1,12,stockDepth+officeDepth),Vector3.new(-16,6,backCenter))
+ resize("BackroomRight",Vector3.new(1,12,stockDepth+officeDepth),Vector3.new(16,6,backCenter))
+ resize("BackroomWall",Vector3.new(32,12,1),Vector3.new(0,6,backZ))
+ local pavement=model.Pavement
+ local pavementFront=origin.Z-36
+ local pavementBack=origin.Z+backZ+3
+ pavement.Size=Vector3.new(84,1,pavementBack-pavementFront)
+ pavement.Position=Vector3.new(origin.X,pavement.Position.Y,(pavementFront+pavementBack)/2)
+ -- The original rear grass tiles start at the old pavement edge. Trim only
+ -- this plot's rear tile to the new edge instead of rendering coplanar faces.
+ local city=workspace:FindFirstChild("MidnightCity")
+ local grass=city and city:FindFirstChild("GrassTiles")
+ for _,tile in ipairs(grass and grass:GetChildren() or {}) do
+  if tile:IsA("BasePart") and math.abs(tile.Position.X-origin.X)<.01 and math.abs(tile.Size.X-pavement.Size.X)<.01 then
+   local front=tile.Position.Z-tile.Size.Z/2
+   local back=tile.Position.Z+tile.Size.Z/2
+   if front>origin.Z and front<pavementBack and back>pavementBack then
+    tile.Size=Vector3.new(tile.Size.X,tile.Size.Y,back-pavementBack)
+    tile.Position=Vector3.new(tile.Position.X,tile.Position.Y,(pavementBack+back)/2)
+   end
+  end
+ end
+ local old=model:FindFirstChild("BackroomLayout");if old then old:Destroy() end
+ local folder=Instance.new("Folder");folder.Name="BackroomLayout";folder.Parent=model
+ local rackParent
+ local function part(name,size,offset,color)
+  local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=origin+offset;p.Anchored=true;p.Color=color;p.Material=Enum.Material.SmoothPlastic;p.Parent=rackParent or folder;return p
+ end
+ local wall=Color3.fromRGB(34,59,62)
+ -- Stock occupies the front room; a six-stud doorway on the right leads into the office.
+ part("OfficeDivider",Vector3.new(23,12,.5),Vector3.new(-4.5,6,dividerZ),wall)
+ part("OfficeDoorSide",Vector3.new(3,12,.5),Vector3.new(14.5,6,dividerZ),wall)
+ part("OfficeDoorHeader",Vector3.new(6,3,.5),Vector3.new(10,10.5,dividerZ),wall)
+ local function sign(name,text,offset,color)
+  local board=part(name,Vector3.new(7,1.6,.2),offset,Color3.fromRGB(17,31,38))
+  local g=Instance.new("SurfaceGui");g.Face=Enum.NormalId.Front;g.CanvasSize=Vector2.new(700,160);g.LightInfluence=0;g.Parent=board
+  local t=Instance.new("TextLabel");t.Size=UDim2.fromScale(1,1);t.BackgroundTransparency=1;t.Text=text;t.Font=Enum.Font.GothamBold;t.TextSize=70;t.TextColor3=color;t.Parent=g
+ end
+ -- Raised clear of the shelf route guides that sit above each rack (StyleService ingredient guides).
+ sign("StockRoomSign","INGREDIENTS",Vector3.new(-4,10.6,dividerZ-.35),Color3.fromRGB(126,238,205))
+ sign("OfficeSign","OFFICE",Vector3.new(10,10.4,dividerZ-.35),Color3.fromRGB(255,213,139))
+ local lamp=part("OfficeLamp",Vector3.new(5,.2,1),Vector3.new(0,10.8,dividerZ+7),Color3.fromRGB(255,216,164));lamp.Material=Enum.Material.Neon;lamp.CanCollide=false
+ local light=Instance.new("PointLight");light.Name="ShopLight";light.Color=lamp.Color;light.Brightness=1.2;light.Range=22;light.Parent=lamp
+ local stockLamp=part("StockCeilingLight",Vector3.new(8,.2,1),Vector3.new(-2,10.5,12),Color3.fromRGB(245,238,212));stockLamp.Material=Enum.Material.Neon;stockLamp.CanCollide=false
+ local stockLight=Instance.new("PointLight");stockLight.Name="ShopLight";stockLight.Color=stockLamp.Color;stockLight.Brightness=.65;stockLight.Range=18;stockLight.Parent=stockLamp
+ -- Compact ingredient pantry: lower pick bins retain their prompts and server validation.
+ local steel=Color3.fromRGB(84,99,107);local shelf=Color3.fromRGB(150,157,152)
+ for i,name in ipairs({"StockNoodles","StockRice","StockTea"}) do
+  local x=-11+(i-1)*7.5
+  local rackPivot=CFrame.new(origin+Vector3.new(x,.5,rackZ))
+  rackParent=Instance.new("Model");rackParent.Name=name.."Rack";rackParent.Parent=folder
+  rackParent.WorldPivot=rackPivot
+  local function scaleBinPart(p)
+   local relative=rackPivot:ToObjectSpace(p.CFrame)
+   p.Size*=rackScale
+   p.CFrame=rackPivot*CFrame.new(relative.Position*rackScale)*relative.Rotation
+  end
+  local bin=model:FindFirstChild(name)
+  if bin then
+   local delta=origin+Vector3.new(x,1.5,rackZ)-bin.Position
+   bin.CFrame+=delta
+   for _,child in bin:GetDescendants() do if child:IsA("BasePart") then child.CFrame+=delta end end
+   -- Ingredient box visuals are siblings of the pick bin, not children of it.
+   local icon=model:FindFirstChild(name.."Icon")
+   if icon and icon:IsA("Model") then
+    icon:PivotTo(icon:GetPivot()+delta)
+    icon.WorldPivot=rackPivot
+    icon:ScaleTo(icon:GetScale()*rackScale)
+   end
+   scaleBinPart(bin)
+   for _,child in bin:GetDescendants() do if child:IsA("BasePart") then scaleBinPart(child) end end
+  end
+  for _,dx in ipairs({-3.5,3.5}) do for _,dz in ipairs({-1.7,1.7}) do
+   local post=part("RackPost",Vector3.new(.22,6,.22),Vector3.new(x+dx,3.5,rackZ+dz),steel);post.Material=Enum.Material.Metal
+  end end
+  for _,y in ipairs({.65,3.6,6.5}) do
+   local deck=part("RackShelf",Vector3.new(7.4,.18,3.7),Vector3.new(x,y,rackZ),shelf);deck.Material=Enum.Material.Metal
+  end
+  for n=1,3 do
+   local bx=x+(n-2)*2.15
+   if i==1 then
+    local sack=part("RiceFlourSack",Vector3.new(1.7,2,2.1),Vector3.new(bx,4.7,rackZ),Color3.fromRGB(221,207,163));sack.Shape=Enum.PartType.Ball;sack.Material=Enum.Material.Fabric
+    part("SackTie",Vector3.new(.65,.25,.65),Vector3.new(bx,5.65,rackZ),Color3.fromRGB(120,94,52))
+   elseif i==2 then
+    part("ProduceCrate",Vector3.new(1.95,.25,2.5),Vector3.new(bx,3.9,rackZ),Color3.fromRGB(88,123,64)).Material=Enum.Material.Wood
+    for _,dz in ipairs({-1.15,1.15}) do part("CrateRim",Vector3.new(1.95,.7,.15),Vector3.new(bx,4.2,rackZ+dz),Color3.fromRGB(88,123,64)).Material=Enum.Material.Wood end
+    for a=1,2 do for b=1,3 do
+     local vegetable=part(n==1 and "Cabbage" or n==2 and "Tomato" or "Carrot",n==3 and Vector3.new(.3,1.1,.3) or Vector3.new(.65,.65,.65),Vector3.new(bx+(a-1.5)*.8,4.5,rackZ+(b-2)*.7),n==1 and Color3.fromRGB(116,173,66) or n==2 and Color3.fromRGB(213,66,44) or Color3.fromRGB(237,134,42));vegetable.Shape=Enum.PartType.Ball
+    end end
+   else
+    local jar=part("TeaIngredientJar",Vector3.new(1.6,1.2,1.2),Vector3.new(bx,4.55,rackZ),Color3.fromRGB(147,91,43));jar.Shape=Enum.PartType.Cylinder;jar.CFrame=CFrame.new(jar.Position)*CFrame.Angles(0,0,math.pi/2)
+    part("JarLid",Vector3.new(1.4,.15,1.4),Vector3.new(bx,5.4,rackZ),Color3.fromRGB(229,218,185))
+   end
+  end
+  rackParent:ScaleTo(rackScale)
+  rackParent=nil
+ end
+ -- Small receiving surface leaves the front aisle clear in the compact room.
+ part("ReceivingBenchTop",Vector3.new(3,.25,2),Vector3.new(-13,2.7,11.5),Color3.fromRGB(157,165,163)).Material=Enum.Material.Metal
+ for _,x in ipairs({-14.2,-11.8}) do part("ReceivingBenchLeg",Vector3.new(.25,2.1,1.6),Vector3.new(x,1.6,11.5),steel).Material=Enum.Material.Metal end
+ -- Office furniture is kept away from the doorway and central access aisle.
+ local cabinet=part("FilingCabinet",Vector3.new(3.2,4.8,2.2),Vector3.new(-13,2.9,backZ-4),Color3.fromRGB(99,112,117));cabinet.Material=Enum.Material.Metal
+ for y=1.7,4.1,1.2 do
+  part("DrawerFront",Vector3.new(2.9,1.05,.1),Vector3.new(-13,y,backZ-5.15),Color3.fromRGB(115,130,134))
+  part("DrawerHandle",Vector3.new(.8,.12,.15),Vector3.new(-13,y,backZ-5.3),Color3.fromRGB(44,51,55))
+ end
+ part("OfficeNoticeBoard",Vector3.new(7,3.3,.18),Vector3.new(-6,7.2,backZ-.65),Color3.fromRGB(155,118,77)).Material=Enum.Material.Wood
+ for n=1,3 do part("OfficePaper",Vector3.new(1.4,2,.04),Vector3.new(-9+n*1.8,7.2,backZ-.79),Color3.fromRGB(235,229,203)).CanCollide=false end
+end
+
+local function buildWorldActions(shop)
+ local old=shop.Model:FindFirstChild("WorldActions");if old then old:Destroy() end
+ local folder=Instance.new("Folder");folder.Name="WorldActions";folder.Parent=shop.Model
+ local floor=shop.Model.ShopFloor
+ local function part(parent,name,size,pos,color,material)
+  local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=pos;p.Color=color;p.Material=material or Enum.Material.SmoothPlastic;p.Anchored=true;p.Parent=parent;return p
+ end
+ local function prompt(parent,name,actionText,objectText)
+  local p=Instance.new("ProximityPrompt");p.Name=name.."Prompt";p.ActionText=actionText;p.ObjectText=objectText;p.KeyboardKeyCode=Enum.KeyCode.E;p.GamepadKeyCode=Enum.KeyCode.ButtonX;p.HoldDuration=.15;p.MaxActivationDistance=9;p.RequiresLineOfSight=false;p.Parent=parent;return p
+ end
+ local function signText(parent,name,text,color)
+  for _,face in ipairs({Enum.NormalId.Front,Enum.NormalId.Back}) do
+   local gui=Instance.new("SurfaceGui");gui.Name=name.."Gui";gui.Adornee=parent;gui.Face=face;gui.CanvasSize=Vector2.new(500,280);gui.AlwaysOnTop=false;gui.LightInfluence=0;gui.Parent=parent
+   local label=Instance.new("TextLabel");label.Name=name.."Text";label.Size=UDim2.fromScale(1,1);label.BackgroundTransparency=1;label.BorderSizePixel=0;label.Text=text;label.TextColor3=color;label.TextStrokeTransparency=.55;label.Font=Enum.Font.GothamBlack;label.TextSize=66;label.TextWrapped=true;label.Parent=gui
+  end
+ end
+
+ -- The owner upgrades from a real work desk in the backroom, not from the front pavement.
+ local backroom=shop.Model:FindFirstChild("BackroomFloor") or floor
+ local desk=Instance.new("Model");desk.Name="Upgrade";desk.Parent=folder
+ local deskPos=Vector3.new(backroom.Position.X-4,backroom.Position.Y,shop.Model.BackroomWall.Position.Z-5)
+ local top=part(desk,"DeskTop",Vector3.new(8,.35,3.6),deskPos+Vector3.new(0,3.2,0),Color3.fromRGB(125,86,52),Enum.Material.WoodPlanks)
+ for _,x in ipairs({-3.4,3.4}) do part(desk,"DeskLeg",Vector3.new(.35,2.7,2.8),deskPos+Vector3.new(x,1.85,0),Color3.fromRGB(49,58,62),Enum.Material.Metal) end
+ part(desk,"MonitorStand",Vector3.new(.35,.65,.3),deskPos+Vector3.new(0,3.65,.65),Color3.fromRGB(49,58,62),Enum.Material.Metal)
+ part(desk,"MonitorBase",Vector3.new(1.5,.15,.8),deskPos+Vector3.new(0,3.45,.65),Color3.fromRGB(49,58,62),Enum.Material.Metal)
+ part(desk,"Monitor",Vector3.new(3,1.9,.25),deskPos+Vector3.new(0,4.75,.65),Color3.fromRGB(25,39,47),Enum.Material.Metal)
+ local screen=part(desk,"MonitorGlow",Vector3.new(2.7,1.6,.06),deskPos+Vector3.new(0,4.75,.49),Color3.fromRGB(101,167,178));screen.Material=Enum.Material.SmoothPlastic
+ part(desk,"Keyboard",Vector3.new(2.2,.12,.7),deskPos+Vector3.new(0,3.45,-.7),Color3.fromRGB(40,49,55))
+ for row=1,3 do for col=1,10 do part(desk,"Key",Vector3.new(.15,.035,.13),deskPos+Vector3.new(-1.05+col*.19,3.53,-1+row*.18),Color3.fromRGB(123,137,143)).CanCollide=false end end
+ part(desk,"MousePad",Vector3.new(1.1,.04,1.1),deskPos+Vector3.new(2,3.4,-.6),Color3.fromRGB(42,73,77))
+ local mouse=part(desk,"Mouse",Vector3.new(.4,.18,.65),deskPos+Vector3.new(2,3.51,-.6),Color3.fromRGB(170,177,179));mouse.Shape=Enum.PartType.Ball
+ part(desk,"ComputerTower",Vector3.new(1.3,2.2,2),deskPos+Vector3.new(2.5,1.65,.3),Color3.fromRGB(39,47,53),Enum.Material.Metal)
+ part(desk,"DeskLampStem",Vector3.new(.15,1.6,.15),deskPos+Vector3.new(-3,4.1,.5),Color3.fromRGB(47,57,60),Enum.Material.Metal)
+ part(desk,"DeskLampShade",Vector3.new(1.2,.35,.9),deskPos+Vector3.new(-3,4.9,.3),Color3.fromRGB(227,186,96))
+ local chair=Instance.new("Seat");chair.Name="OfficeChair";chair.Size=Vector3.new(2.3,.35,2.1);chair.CFrame=CFrame.new(deskPos+Vector3.new(0,2.1,-3.3))*CFrame.Angles(0,math.pi,0);chair.TopSurface=Enum.SurfaceType.Smooth;chair.BottomSurface=Enum.SurfaceType.Smooth;chair.Anchored=true;chair.Color=Color3.fromRGB(40,63,72);chair.Parent=desk
+ part(desk,"ChairBack",Vector3.new(2.3,2.1,.35),deskPos+Vector3.new(0,3.2,-4.25),Color3.fromRGB(40,63,72))
+ part(desk,"ChairStem",Vector3.new(.35,1.3,.35),deskPos+Vector3.new(0,1.3,-3.3),Color3.fromRGB(90,100,105),Enum.Material.Metal)
+ for _,size in ipairs({Vector3.new(2.6,.18,.35),Vector3.new(.35,.18,2.6)}) do part(desk,"ChairBase",size,deskPos+Vector3.new(0,.65,-3.3),Color3.fromRGB(63,73,78),Enum.Material.Metal) end
+ local lamp=Instance.new("PointLight");lamp.Color=Color3.fromRGB(255,199,101);lamp.Brightness=.65;lamp.Range=8;lamp.Parent=top
+ signText(desk.MonitorGlow,"UpgradeDesk","UPGRADE\nDESK",Color3.fromRGB(46,44,35))
+ local upgrade=prompt(top,"Upgrade","Open upgrades","WORK DESK")
+ upgrade.Triggered:Connect(function(player)
+  local pd=personal(player)
+  if pd and pd.ShopId==shop.Id and shop.Owner==player and near(player,upgrade.Parent) then RS.MidnightNetwork.OpenPanel:FireClient(player,"Upgrade")
+  else tell(player,"Only this kitchen's owner can upgrade here") end
+ end)
+
+ -- Applicants walk to the hiring sign beside the restaurant. The small green pad keeps the action discoverable.
+ local hiring=Instance.new("Model");hiring.Name="CrewJoin";hiring.Parent=folder
+ local sidePos=floor.Position+Vector3.new(-floor.Size.X/2-5,floor.Size.Y/2,-1)
+ local pad=part(hiring,"HiringPad",Vector3.new(.25,6,6),sidePos+Vector3.new(0,.15,0),Color3.fromRGB(111,231,193),Enum.Material.Neon);pad.Shape=Enum.PartType.Cylinder;pad.CFrame=CFrame.new(pad.Position)*CFrame.Angles(0,0,math.rad(90));pad.CanCollide=false;pad.Transparency=.18
+ part(hiring,"SignPost",Vector3.new(.45,4,.45),sidePos+Vector3.new(0,2,0),Color3.fromRGB(55,70,72),Enum.Material.Metal)
+ local board=part(hiring,"HiringBoard",Vector3.new(5,2.8,.35),sidePos+Vector3.new(0,4.4,0),Color3.fromRGB(28,65,64),Enum.Material.Wood)
+ signText(board,"CrewHiring","CREW WANTED\nJOIN HERE",Color3.fromRGB(143,255,218))
+ local crew=prompt(board,"CrewJoin","Apply for crew","NOW HIRING")
+ crew.Triggered:Connect(function(player)
+  local pd=personal(player)
+  if not pd or pd.ShopId==shop.Id then tell(player,"You already work here");return end
+  local ok,msg=Service.Join(player,shop.Id);tell(player,msg or (ok and "Joined crew" or "Could not join"))
+ end)
 end
 -- Called after the owner has been removed from shop.Members. Hands the kitchen to the longest-serving crew member,
 -- or vacates it when nobody is left. Refunds run first while the old owner's stock is still attached.
@@ -408,6 +683,7 @@ local function releaseShop(shop)
  local function clearStaff()
   local employees=shop.Model:FindFirstChild("Employees");if employees then employees:Destroy() end
   local patio=shop.Model:FindFirstChild("Patio");if patio then patio:Destroy() end
+  local expansion=shop.Model:FindFirstChild("DiningExpansion");if expansion then expansion:Destroy() end
  end
  if not heir then
   finish(shop,false);shop.Owner=nil;shop.Locked=false;clearStaff()
@@ -425,7 +701,7 @@ local function releaseShop(shop)
  shop.PartyRemaining=0;shop.CloseReason="";shop.Combo=0;shop.Locked=false;shop.Kicked={}
  lights(shop,true);removeCustomer(shop);clearStaff()
  shop.Owner=heir;heir:SetAttribute("Role","Owner")
- theme(shop);refreshWorkers(shop);refreshDecor(shop);updateOwnerBillboard(shop)
+ theme(shop);refreshWorkers(shop);refreshDecor(shop);refreshExpansion(shop);updateOwnerBillboard(shop)
  for member in pairs(shop.Members) do tell(member,heir.DisplayName.." now owns this kitchen. Open the shop when ready.") end
  Service.Sync(shop)
 end
@@ -448,6 +724,7 @@ function Service.Join(player,id)
   if old.Owner==player then releaseShop(old) end
  end
  pd.ShopId=id;pd.JoinedAt=os.clock();pd.Held="";pd.Cooking="";pd.CookEnd=0;target.Members[player]=true;target.Model:AddPersistentPlayer(player);player:SetAttribute("ShopId",id);player:SetAttribute("Role",target.Owner==player and "Owner" or "Crew")
+ updateOwnerBillboard(target);if old then updateOwnerBillboard(old) end
  Service.Teleport(player);if old then Service.Sync(old) end;Service.Sync(target)
  return true,"Joined shop "..id
 end
@@ -467,11 +744,11 @@ function Service.VisitCity(player)
  local pd=personal(player);if not pd then return false,"Not ready" end
  local old=Service.Shops[pd.ShopId]
  if old and old.Owner==player then return false,"Join another kitchen to release your shop" end
- if old then Inventory.Return(player,old);Inventory.CancelCooking(player,old);dropHeld(player,old);old.Members[player]=nil;old.Model:RemovePersistentPlayer(player);Service.Sync(old) end
+ if old then Inventory.Return(player,old);Inventory.CancelCooking(player,old);dropHeld(player,old);old.Members[player]=nil;old.Model:RemovePersistentPlayer(player);updateOwnerBillboard(old);Service.Sync(old) end
  pd.ShopId=0;pd.Held="";pd.Cooking="";pd.CookEnd=0
  player:SetAttribute("ShopId",0);player:SetAttribute("Role","Visitor")
  Service.SyncLobby(player);Service.Teleport(player)
- return true,"In the city. Choose a kitchen in Co-op."
+ return true,"In the city. Open your own kitchen from Kitchen, or apply at a green NOW HIRING sign."
 end
 function Service.ReturnHome(player)
  local pd=personal(player);if not pd then return false,"Not ready" end
@@ -479,11 +756,11 @@ function Service.ReturnHome(player)
  if old and old.Owner==player then Service.Teleport(player);return true end
  local free
  for _,s in ipairs(Service.Shops) do if not s.Owner then free=s;break end end
- if not free then return false,"No vacant kitchens. Choose a crew in Co-op." end
+ if not free then return false,"No vacant kitchens. Apply at a green NOW HIRING sign beside a restaurant." end
  if old then Inventory.Return(player,old);Inventory.CancelCooking(player,old);dropHeld(player,old);old.Members[player]=nil;old.Model:RemovePersistentPlayer(player);Service.Sync(old) end
  free.Owner=player;free.Members[player]=true;free.Model:AddPersistentPlayer(player);free.Locked=false;free.Phase="Ready";pd.ShopId=free.Id;pd.Held="";pd.Cooking="";pd.CookEnd=0
  player:SetAttribute("ShopId",free.Id);player:SetAttribute("Role","Owner")
- theme(free);refreshWorkers(free);refreshDecor(free);updateOwnerBillboard(free);Service.Teleport(player);Service.Sync(free)
+ theme(free);refreshWorkers(free);refreshDecor(free);refreshExpansion(free);updateOwnerBillboard(free);Service.Teleport(player);Service.Sync(free)
  return true,"Your shop is ready"
 end
 function Service.AddPlayer(player)
@@ -508,7 +785,7 @@ function Service.AddPlayer(player)
   local pd=personal(player);if pd then local shop=Service.Shops[pd.ShopId];Inventory.CancelCooking(player,shop);if shop and pd.Held~="" then Inventory.Refund(shop,pd.Held) end;pd.Held="";pd.Cooking="";pd.CookEnd=0 end
   task.wait(.4);characterLook(player);Service.Teleport(player)
  end)
- if free then theme(free);refreshWorkers(free);refreshDecor(free);updateOwnerBillboard(free);Service.Sync(free) else Service.SyncLobby(player) end
+ if free then theme(free);refreshWorkers(free);refreshDecor(free);refreshExpansion(free);updateOwnerBillboard(free);Service.Sync(free) else Service.SyncLobby(player) end
  if player.Character then characterLook(player);Service.Teleport(player) end
 end
 function Service.RemovePlayer(player)
@@ -576,7 +853,7 @@ function Service.Command(player,action,id)
  if action=="Home" then return Service.ReturnHome(player) end
  if action=="Leave" then return Service.VisitCity(player) end
  if action=="Teleport" then Service.Teleport(player);return true,shop and "Returned to your kitchen" or "Returned to city spawn" end
- if action=="Lock" then if not shop or shop.Owner~=player then return false,"Owner only" end;shop.Locked=not shop.Locked;return true,shop.Locked and "Shop locked" or "Shop open to crew" end
+ if action=="Lock" then if not shop or shop.Owner~=player then return false,"Owner only" end;shop.Locked=not shop.Locked;updateOwnerBillboard(shop);return true,shop.Locked and "Shop locked" or "Shop open to crew" end
  if action=="Kick" then
   if not shop or shop.Owner~=player then return false,"Owner only" end
   local member=Players:GetPlayerByUserId(tonumber(id) or 0)
@@ -584,7 +861,7 @@ function Service.Command(player,action,id)
   shop.Kicked=shop.Kicked or {}
   shop.Kicked[member.UserId]={By=player.UserId,Until=os.clock()+300}
   local ok,msg=Service.VisitCity(member)
-  if ok then tell(member,"You were removed from "..player.DisplayName.."'s kitchen.") end
+  if ok then tell(member,"You were removed from "..player.DisplayName.."'s kitchen. Open your own kitchen, or apply at another green NOW HIRING sign.") end
   return ok,ok and (member.DisplayName.." removed for 5 minutes") or msg
  end
  if action=="Deposit" then
@@ -647,7 +924,7 @@ function Service.Command(player,action,id)
    profile.Shop.Bank-=price;profile.Shop.Upgrades[id]=level+1;return true,item.Name.." level "..(level+1)
   end)
   if ok then Experience.Tutorial(player,"Upgrade") end
-  refreshDecor(shop);Service.SyncPlayer(player);return ok,message
+  refreshDecor(shop);refreshExpansion(shop);Service.SyncPlayer(player);return ok,message
  elseif action=="Hire" then
   if not shop or shop.Owner~=player then return false,"Owner only" end
   local valid=false;for _,v in ipairs(Catalog.Workers) do if v.Id==id then valid=true end end;if not valid then return false,"Unknown employee" end
@@ -661,6 +938,213 @@ function Service.Command(player,action,id)
  end
  return false,"Unknown action"
 end
+-- Decorative equipment per ingredient kit: 1 noodle pot (A/D), 2 wok burner (B/E), 3 tea bar (C/F).
+-- The menu dish sits front-left (StyleRenderer); gear uses the right half, the back strip and the front panel.
+local function buildStationGear(station,kit,recipe)
+ local model=station.Parent
+ local old=model:FindFirstChild("StationGear_"..station.Name)
+ local recipeId=recipe and recipe.Id or ""
+ if old and old:GetAttribute("RecipeId")==recipeId then return end
+ if old then old:Destroy() end
+ local folder=Instance.new("Folder");folder.Name="StationGear_"..station.Name;folder.Parent=model
+ folder:SetAttribute("RecipeId",recipeId)
+ local shape=recipe and recipe.Shape or ""
+ local gear=({Croissant="Oven",Cookies="Oven",Pizza="Oven",Roast="Oven",Burger="Grill",HotDog="Grill",Chicken="Grill",Taco="Grill",Sandwich="Prep",Sushi="Prep",Salad="Prep",Dumplings="Steamer",Mug="Coffee",Soda="Blender",Noodles="Pot",Soup="Pot",Rice="Wok",Cup="Tea"})[shape] or ({"Pot","Wok","Tea"})[kit]
+ if recipeId=="BK_PAD_THAI" then gear="Wok" end
+ if recipeId:find("CHICKEN_RICE",1,true) or recipeId=="SIGNATURE_RICE" or recipeId=="OC_RICE" then gear="RiceCooker" end
+ if recipeId=="BG_JASMINE" then gear="Tea" end
+ folder:SetAttribute("Equipment",gear)
+ local top=station.Size.Y/2+.12
+ local function at(x,y,z) return station.CFrame*CFrame.new(x,top+y,z) end
+ local function p(name,size,cf,color,material,shape)
+  local a=Instance.new("Part");a.Name=name;a.Size=size;a.CFrame=cf;a.Color=color;a.Material=material or Enum.Material.SmoothPlastic
+  a.Anchored=true;a.CanCollide=false;a.CanQuery=false;a.CanTouch=false;a.CastShadow=false;if shape then a.Shape=shape end;a.Parent=folder;return a
+ end
+ local function cyl(name,height,diameter,cf,color,material) return p(name,Vector3.new(height,diameter,diameter),cf*CFrame.Angles(0,0,math.rad(90)),color,material,Enum.PartType.Cylinder) end
+ local function lens(name,size,cf,color,material) local a=p(name,size,cf,color,material);local m=Instance.new("SpecialMesh");m.MeshType=Enum.MeshType.Sphere;m.Parent=a;return a end
+ local steel,dark=Color3.fromRGB(100,113,127),Color3.fromRGB(42,44,50)
+ local splash=({Color3.fromRGB(145,158,149),Color3.fromRGB(154,86,67),Color3.fromRGB(70,137,123)})[kit]
+ p("Backsplash",Vector3.new(station.Size.X,1.8,.1),at(0,.9,station.Size.Z/2-.05),splash,Enum.Material.CeramicTiles)
+ p("KickPlate",Vector3.new(station.Size.X-.2,.35,.06),station.CFrame*CFrame.new(0,-station.Size.Y/2+.25,-station.Size.Z/2-.03),dark,Enum.Material.Metal)
+ if kit==1 or kit==2 then
+  for i=-1,1 do p("Knob",Vector3.new(.14,.28,.28),station.CFrame*CFrame.new(i*.6,-.85,-station.Size.Z/2-.07)*CFrame.Angles(0,math.rad(90),0),dark,Enum.Material.Metal,Enum.PartType.Cylinder) end
+ end
+ if gear=="Oven" then
+  p("OvenBody",Vector3.new(1.8,1.45,1.55),at(.95,.73,.3),steel,Enum.Material.Metal)
+  p("OvenDoor",Vector3.new(1.5,.9,.08),at(.95,.68,-.51),dark)
+  local glass=p("OvenWindow",Vector3.new(1.2,.55,.06),at(.95,.65,-.57),Color3.fromRGB(117,69,31),Enum.Material.Glass);glass.Transparency=.2
+  p("OvenHandle",Vector3.new(1,.1,.12),at(.95,1.18,-.61),steel,Enum.Material.Metal)
+  for _,x in {.45,1.45} do cyl("OvenDial",.09,.18,at(x,1.43,.3),dark) end
+  p("BakingTray",Vector3.new(1.25,.08,.55),at(-.9,.05,1),steel,Enum.Material.Metal)
+ elseif gear=="Grill" then
+  p("GrillBase",Vector3.new(1.8,.45,1.8),at(.95,.23,.25),steel,Enum.Material.Metal)
+  p("Griddle",Vector3.new(1.65,.1,1.6),at(.95,.5,.25),dark,Enum.Material.Metal)
+  for i=0,5 do p("GrillRidge",Vector3.new(.07,.06,1.5),at(.3+i*.26,.57,.25),steel,Enum.Material.Metal) end
+  p("SpatulaBlade",Vector3.new(.4,.05,.5),at(-.7,.08,1),steel,Enum.Material.Metal)
+  p("SpatulaHandle",Vector3.new(.1,.07,.6),at(-.7,.1,.5),Color3.fromRGB(102,66,39),Enum.Material.Wood)
+ elseif gear=="Prep" then
+  p("CuttingBoard",Vector3.new(1.8,.15,1.75),at(.95,.08,.25),Color3.fromRGB(174,123,67),Enum.Material.Wood)
+  p("KnifeBlade",Vector3.new(.08,.25,.65),at(1.55,.26,.4),steel,Enum.Material.Metal)
+  p("KnifeHandle",Vector3.new(.13,.15,.35),at(1.55,.22,-.1),dark)
+  for i=1,3 do lens("IngredientBowl",Vector3.new(.5,.25,.5),at(-1.7+i*.6,.15,1),({Color3.fromRGB(93,151,74),Color3.fromRGB(202,88,60),Color3.fromRGB(228,205,156)})[i]) end
+ elseif gear=="Steamer" or gear=="RiceCooker" then
+  local bamboo=Color3.fromRGB(177,128,71)
+  cyl("CookerBase",.18,1.65,at(.95,.09,.25),dark,Enum.Material.Metal)
+  cyl(gear=="Steamer" and "BambooBasket" or "RiceCooker",.85,1.5,at(.95,.61,.25),gear=="Steamer" and bamboo or steel,gear=="Steamer" and Enum.Material.Wood or Enum.Material.Metal)
+  cyl("CookerLid",.14,1.6,at(.95,1.12,.25),gear=="Steamer" and bamboo or dark)
+  p("LidHandle",Vector3.new(.45,.18,.18),at(.95,1.27,.25),dark)
+  if gear=="Steamer" then for i=-2,2 do p("BasketSlat",Vector3.new(.06,.04,1.1),at(.95+i*.22,1.21,.25),Color3.fromRGB(101,70,40),Enum.Material.Wood) end
+  else p("CookerControl",Vector3.new(.4,.2,.05),at(.95,.5,-.53),Color3.fromRGB(66,146,125)) end
+ elseif gear=="Coffee" then
+  p("CoffeeMachine",Vector3.new(1.8,1.3,.9),at(.95,.8,.75),steel,Enum.Material.Metal)
+  p("CoffeePanel",Vector3.new(1.5,.45,.08),at(.95,1.15,.26),dark)
+  p("DripTray",Vector3.new(1.8,.12,1.5),at(.95,.06,.35),dark,Enum.Material.Metal)
+  for _,x in {.55,1.3} do
+   p("CoffeeSpout",Vector3.new(.12,.25,.25),at(x,.75,.2),steel,Enum.Material.Metal)
+   cyl("CoffeeCup",.35,.4,at(x,.3,.1),Color3.fromRGB(230,211,179))
+  end
+ elseif gear=="Blender" then
+  cyl("BlenderBase",.35,1,at(.95,.18,.4),dark)
+  local jug=cyl("BlenderJug",1.1,.9,at(.95,.92,.4),Color3.fromRGB(177,215,219),Enum.Material.Glass);jug.Transparency=.45
+  cyl("BlenderDrink",.6,.72,at(.95,.7,.4),Color3.fromRGB(unpack(recipe.Color)))
+  cyl("BlenderLid",.12,1,at(.95,1.53,.4),dark)
+  p("JugHandle",Vector3.new(.15,.6,.25),at(1.56,1,.4),steel)
+ elseif gear=="Pot" then
+  cyl("Burner",.14,1.7,at(1,.07,.2),dark,Enum.Material.Metal)
+  cyl("StockPot",1,1.35,at(1,.64,.2),steel,Enum.Material.Metal)
+  cyl("PotRim",.08,1.45,at(1,1.16,.2),steel:Lerp(Color3.new(1,1,1),.2),Enum.Material.Metal)
+  cyl("Broth",.04,1.2,at(1,1.1,.2),Color3.fromRGB(222,166,88))
+  for i,angle in {15,75,130} do p("Noodle",Vector3.new(.7,.05,.09),at(1+math.cos(math.rad(angle))*.2,1.13,.2+math.sin(math.rad(angle))*.2)*CFrame.Angles(0,math.rad(angle*i),0),Color3.fromRGB(246,224,150)) end
+  for _,x in {-.78,.78} do p("PotHandle",Vector3.new(.3,.12,.18),at(1+x,.95,.2),steel,Enum.Material.Metal) end
+  local source=p("SteamSource",Vector3.new(.1,.1,.1),at(1,1.15,.2),Color3.new(1,1,1));source.Transparency=1
+  local steam=Instance.new("ParticleEmitter");steam.Name="PotSteam";steam.Texture="rbxasset://textures/particles/smoke_main.dds";steam.Rate=3
+  steam.Lifetime=NumberRange.new(1.5,2.5);steam.Speed=NumberRange.new(1,2);steam.SpreadAngle=Vector2.new(15,15)
+  steam.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.4),NumberSequenceKeypoint.new(1,1.4)});steam.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,.7),NumberSequenceKeypoint.new(1,1)})
+  steam.LightEmission=.2;steam.Parent=source
+  cyl("UtensilCup",.6,.5,at(-1.55,.3,1.05),steel,Enum.Material.Metal)
+  for i,x in {-.1,.1,0} do p("Ladle",Vector3.new(.06,1.1,.06),at(-1.55+x,.85,1.05+(i==3 and .1 or -.05))*CFrame.Angles(0,0,math.rad(x*60)),dark,Enum.Material.Metal) end
+  for i=0,2 do cyl("Bowl",.12,.8,at(-.55,.06+i*.13,1.05),Color3.fromRGB(242,240,232)) end
+ elseif gear=="Wok" then
+  cyl("Grate",.1,1.5,at(1,.05,.2),dark,Enum.Material.Metal)
+  for i=0,7 do
+   local a=i*math.pi/4
+   local flame=p("Flame",Vector3.new(.16,.3,.16),at(1+math.cos(a)*.6,.22,.2+math.sin(a)*.55),Color3.fromRGB(255,140,40),Enum.Material.Neon)
+   if i==0 then local glow=Instance.new("PointLight");glow.Color=Color3.fromRGB(255,150,60);glow.Brightness=1;glow.Range=5;glow.Parent=flame end
+  end
+  lens("Wok",Vector3.new(1.9,.5,1.9),at(1,.5,.2),dark,Enum.Material.Metal)
+  cyl("WokRim",.05,1.92,at(1,.5,.2),Color3.fromRGB(90,94,102),Enum.Material.Metal)
+  lens("WokRice",Vector3.new(1.5,.42,1.5),at(1,.68,.2),Color3.fromRGB(232,186,96))
+  for i,color in {Color3.fromRGB(110,180,80),Color3.fromRGB(240,120,60),Color3.fromRGB(250,230,140)} do p("WokBit",Vector3.new(.16,.16,.16),at(1+(i-2)*.3,.8,.2+(i%2)*.2),color,nil,Enum.PartType.Ball) end
+  p("WokHandle",Vector3.new(.14,.14,1),at(1,.72,-1.15)*CFrame.Angles(math.rad(-12),0,0),Color3.fromRGB(70,46,32),Enum.Material.Wood)
+  p("Spatula",Vector3.new(.07,1.1,.07),at(1.45,1.05,.35)*CFrame.Angles(0,0,math.rad(-35)),dark,Enum.Material.Metal)
+  for i,color in {Color3.fromRGB(60,36,24),Color3.fromRGB(200,50,40),Color3.fromRGB(230,190,70)} do
+   cyl("SauceBottle",.7,.3,at(-1.75+i*.38,.35,1.1),color,Enum.Material.Glass)
+   cyl("BottleCap",.12,.2,at(-1.75+i*.38,.76,1.1),Color3.fromRGB(240,240,236))
+  end
+ else
+  for i,tea in {Color3.fromRGB(228,139,59),Color3.fromRGB(150,200,120)} do
+   local x=.45+(i-1)*1.05
+   p("DispenserBase",Vector3.new(.9,.25,.9),at(x,.12,.85),dark,Enum.Material.Metal)
+   local tank=cyl("DispenserTank",1.3,.85,at(x,.9,.85),tea,Enum.Material.Glass);tank.Transparency=.25
+   cyl("DispenserLid",.12,.9,at(x,1.6,.85),steel,Enum.Material.Metal)
+   p("Tap",Vector3.new(.14,.18,.3),at(x,.4,.33),steel,Enum.Material.Metal)
+  end
+  for i=0,3 do local cup=cyl("CupStack",.22,.55,at(1.5,.11+i*.2,-.85),Color3.fromRGB(240,244,246),Enum.Material.Glass);cup.Transparency=.2 end
+  cyl("Shaker",.7,.42,at(.55,.35,-.85),steel,Enum.Material.Metal)
+  cyl("StrawCup",.5,.4,at(-1.6,.25,1.1),Color3.fromRGB(60,64,72))
+  for i,color in {Color3.fromRGB(255,90,150),Color3.fromRGB(90,220,255),Color3.fromRGB(255,214,92)} do p("Straw",Vector3.new(.05,.8,.05),at(-1.6+(i-2)*.08,.7,1.1)*CFrame.Angles(0,0,math.rad((i-2)*12)),color) end
+  p("BarFront",Vector3.new(station.Size.X-.2,1.2,.06),station.CFrame*CFrame.new(0,-.7,-station.Size.Z/2-.03),Color3.fromRGB(150,98,60),Enum.Material.Wood)
+ end
+end
+function Service.RefreshStationGear(model,themeId)
+ for index,id in Recipes.FullMenuForModel(model,themeId) do
+  local station=model:FindFirstChild(Recipes.Stations[index])
+  if station then buildStationGear(station,Recipes.Slot(id),Recipes.Get(id)) end
+ end
+end
+local function buildCookingStations(model)
+ -- User-selected midpoint between original warm lights and the softer visual-polish preset.
+ -- Preserve ShopLight identity for BLACKOUT/SHADOW control.
+ for _,fixture in model:GetChildren() do
+  if fixture.Name=="CeilingLamp" then
+   local light=fixture:FindFirstChildOfClass("PointLight")
+   if light then
+    light.Brightness=1.35;light.Range=21
+    light.Color=Color3.fromRGB(255,213,164):Lerp(Color3.fromRGB(255,230,201),.5)
+   end
+  end
+ end
+ local cooktops={}
+ for _,p in model:GetChildren() do if p.Name=="Cooktop" and p:IsA("BasePart") then table.insert(cooktops,p) end end
+ table.sort(cooktops,function(a,b)return a.Position.X<b.Position.X end)
+ for index=4,6 do
+  local source=model[Recipes.Stations[index-3]]
+  local station=source:Clone();station.Name=Recipes.Stations[index]
+  station.Cook.Enabled=false;station.Parent=model
+ end
+ local floor,wall=model.ShopFloor,model.BackWall
+ local rear=wall.Position.Z-wall.Size.Z/2-.15
+ for index,name in Recipes.Stations do
+  local station=model[name]
+  station.Size=Vector3.new(4.1,station.Size.Y,3)
+  station.CFrame=CFrame.new(floor.Position.X-13.25+(index-1)*4.4,station.Position.Y,rear-station.Size.Z/2)*station.CFrame.Rotation
+  local top=cooktops[index]
+  if not top and cooktops[index-3] then top=cooktops[index-3]:Clone();top.Parent=model end
+  if top then
+   top.Size=Vector3.new(station.Size.X-.4,.12,station.Size.Z-.4)
+   top.CFrame=station.CFrame*CFrame.new(0,station.Size.Y/2+.06,0)
+   top:SetAttribute("CookingStation",name)
+  end
+  buildStationGear(station,(index-1)%3+1)
+ end
+end
+-- Street-facing decor: striped awning, neon frame around the name board and chase bulbs (animated on the client).
+local function buildStorefront(model)
+ local old=model:FindFirstChild("Storefront");if old then old:Destroy() end
+ local sign,roof=model:FindFirstChild("MIDNIGHT • KITCHEN"),model:FindFirstChild("Roof")
+ local posts={};for _,c in model:GetChildren() do if c.Name=="FrontPost" and c:IsA("BasePart") then table.insert(posts,c) end end
+ table.sort(posts,function(a,b) return a.Position.X<b.Position.X end)
+ if not sign or not roof or #posts<2 then return end
+ local folder=Instance.new("Folder");folder.Name="Storefront";folder.Parent=model
+ local function part(name,size,cf,color,material)
+  local p=Instance.new("Part");p.Name=name;p.Size=size;p.CFrame=cf;p.Color=color;p.Material=material or Enum.Material.SmoothPlastic
+  p.Anchored=true;p.CanCollide=false;p.CanQuery=false;p.CanTouch=false;p.CastShadow=false;p.Parent=folder;return p
+ end
+ local front=sign.Position.Z-sign.Size.Z/2
+ local left,right=posts[1].Position.X,posts[#posts].Position.X
+ local cream,coral=Color3.fromRGB(255,238,206),Color3.fromRGB(236,88,96)
+ local slats,width,depth,drop=8,right-left-1,4,1.4
+ local top=sign.Position.Y-sign.Size.Y/2-.2
+ local slope=math.atan2(drop,depth);local length=math.sqrt(depth*depth+drop*drop);local w=width/slats
+ for i=0,slats-1 do
+  local x=left+.5+w*(i+.5);local color=i%2==0 and coral or cream
+  part("AwningSlat",Vector3.new(w,.25,length),CFrame.new(x,top-drop/2,front-depth/2)*CFrame.Angles(-slope,0,0),color,Enum.Material.Fabric)
+  part("AwningValance",Vector3.new(w,.8,.2),CFrame.new(x,top-drop-.4,front-depth),color,Enum.Material.Fabric)
+ end
+ -- Counter cameras sit under the awning; the client fades it while the camera is inside this box.
+ folder:SetAttribute("AwningCenter",Vector3.new((left+right)/2,top-drop/2-2,front-(depth+8)/2+.5))
+ folder:SetAttribute("AwningSize",Vector3.new(width+4,drop+6,depth+9))
+ local glow=Instance.new("PointLight");glow.Name="ShopLight";glow.Color=Color3.fromRGB(255,206,150);glow.Brightness=1.2;glow.Range=14
+ glow.Parent=part("AwningGlow",Vector3.new(.2,.2,.2),CFrame.new((left+right)/2,top-drop-.2,front-depth+.6),cream)
+ folder.AwningGlow.Transparency=1
+ local pink=Color3.fromRGB(255,92,170);local sx,sy=sign.Size.X/2-.15,sign.Size.Y/2-.15;local c=sign.Position
+ for _,bar in {{Vector3.new(sx*2+.25,.25,.25),Vector3.new(0,sy,0)},{Vector3.new(sx*2+.25,.25,.25),Vector3.new(0,-sy,0)},{Vector3.new(.25,sy*2,.25),Vector3.new(-sx,0,0)},{Vector3.new(.25,sy*2,.25),Vector3.new(sx,0,0)}} do
+  part("NeonFrame",bar[1],CFrame.new(c.X+bar[2].X,c.Y+bar[2].Y,front-.15),pink,Enum.Material.Neon)
+ end
+ -- Bulb path: up the left post, across the roof edge, down the right post.
+ local points={}
+ local postTop=posts[1].Position.Y+posts[1].Size.Y/2
+ local edgeZ,edgeY=roof.Position.Z-roof.Size.Z/2-.2,roof.Position.Y
+ for y=posts[1].Position.Y-posts[1].Size.Y/2+1.5,postTop-.5,1.5 do table.insert(points,Vector3.new(left,y,posts[1].Position.Z-.45)) end
+ local x0,x1=roof.Position.X-roof.Size.X/2+.5,roof.Position.X+roof.Size.X/2-.5
+ local count=math.floor((x1-x0)/1.5)
+ for i=0,count do table.insert(points,Vector3.new(x0+(x1-x0)*i/count,edgeY,edgeZ)) end
+ for y=postTop-.5,posts[1].Position.Y-posts[1].Size.Y/2+1.5,-1.5 do table.insert(points,Vector3.new(right,y,posts[#posts].Position.Z-.45)) end
+ for i,pos in points do
+  local bulb=part("ChaseBulb",Vector3.new(.5,.5,.5),CFrame.new(pos),Color3.fromRGB(255,196,120),Enum.Material.Neon)
+  bulb.Shape=Enum.PartType.Ball;bulb:SetAttribute("ChaseIndex",i)
+ end
+end
 function Service.Start()
  Experience.Start(Service)
  Inventory.Start(Service)
@@ -669,15 +1153,22 @@ function Service.Start()
   if model:IsA("Model") then
    local id=model:GetAttribute("ShopId")
    local s={Id=id,Model=model,Members={},Owner=nil,Phase="Ready",Time=300,Cash=0,Served=0,Strikes=0,Combo=0,Reward=0,Order="",Event="",EventLeft=1,Patience=1,Prepared="",Token=0,Locked=false}
-   Service.Shops[id]=s;updateOwnerBillboard(s);Inventory.Bind(s)
+   Service.Shops[id]=s;buildCookingStations(model);buildBackroom(s);buildWorldActions(s);buildStorefront(model);require(script.Parent.City).DressTrees(model,"TreeTrunk","TreeCrown");updateOwnerBillboard(s);Inventory.Bind(s)
+   local floor,radio,ward=model.ShopFloor,model.Radio,model.Ward
+   local counter=model.CounterTop
+   local inward=Vector3.new(floor.Position.X-counter.Position.X,0,floor.Position.Z-counter.Position.Z).Unit
+   local behind=radio.Position+inward*3
+   ward.Size=Vector3.new(2,.15,2);ward.Position=Vector3.new(behind.X,floor.Position.Y+floor.Size.Y/2+.075,behind.Z)
+   local wardPrompt=ward:FindFirstChildWhichIsA("ProximityPrompt");if wardPrompt then wardPrompt.ObjectText="Shadow behind radio";wardPrompt.ActionText="Banish Shadow" end
    bind(s,"StartShift","Start",function(p) Service.StartShift(p) end)
    for n,name in ipairs(Recipes.Stations) do bind(s,name,"Cook",function(p)
     local food=shopFoods(s)[n]
-    food=Bundles.StationFood(s,n,food)
+    if not food or not table.find(shopFoods(s),food) then tell(p,"This cooking station is locked");return end
     cook(p,s,food)
    end) end
    bind(s,"Serve","Serve",function(p)
     if s.Phase~="Playing" or s.CustomerStage~="Ordering" then tell(p,"Wait for the next customer");return end
+    if s.Event=="SHADOW" then tell(p,"Banish the shadow behind the radio first");return end
     if Service.OrderUnavailable(s) then Service.InformUnavailable(p);return end
     local pd=personal(p);local dish=pd.Held
     if dish~="" then pd.Held="";tryServe(s,p,dish,pd.HeldQuality,pd.HeldScore);pd.HeldQuality=nil;pd.HeldScore=nil
@@ -712,19 +1203,23 @@ function Service.Start()
      if data and data.Workers.Waiter and now-s.ShortageSince>=3 and s.Event=="" then Service.InformUnavailable(s.Owner) end
     else s.ShortageSince=nil end
     s.Time=math.max(0,math.ceil(s.Ends-now))
+    -- Customer patience is frozen while an interruption is active or the owner is still in the guide.
+    local tick=math.clamp(now-(s.LastPatienceTick or now),0,1);s.LastPatienceTick=now
+    if s.CustomerStage=="Ordering" and (s.Event~="" or Experience.TutorialActive(s)) then s.Deadline+=tick end
     if now>=s.Ends then finish(s,true) else
      if s.Event~="" then
-      s.EventLeft=math.clamp((s.EventDeadline-now)/Catalog.Get("EventSeconds"),0,1)
+      s.EventLeft=s.Event=="SHADOW" and 1 or math.clamp((s.EventDeadline-now)/Catalog.Get("EventSeconds"),0,1)
+      if s.Event=="SHADOW" then shadowLights(s,now) end
       local d=shopData(s)
       if d and d.Workers.Technician and now-s.EventBegan>=Catalog.Get("WorkerTechSeconds") then clearEvent(s)
-      elseif now>=s.EventDeadline then clearEvent(s);strike(s) end
+      elseif s.Event~="SHADOW" and now>=s.EventDeadline then clearEvent(s);strike(s) end
      else
       s.Patience=math.clamp((s.Deadline-now)/orderSeconds(s),0,1)
       if s.CustomerStage=="Ordering" and now>=s.Deadline then Experience.Missed(s);strike(s);if s.Phase=="Playing" then nextOrder(s) end end
       if s.Phase=="Playing" and s.CustomerStage=="Ordering" and not Service.OrderUnavailable(s) and not Experience.Training(s) and now>=s.NextEvent then
        s.EventIndex=s.EventIndex%3+1;s.Event=({"BLACKOUT","WHISPER","SHADOW"})[s.EventIndex]
        s.EventBegan=now;s.EventDeadline=now+Catalog.Get("EventSeconds");s.NextEvent=now+Catalog.Get("EventInterval");cue(s,"Danger")
-       if s.Event=="BLACKOUT" then lights(s,false) elseif s.Event=="SHADOW" then customer(s,true) end
+       if s.Event=="BLACKOUT" then lights(s,false) elseif s.Event=="SHADOW" then customer(s,true);shadowLights(s,now) end
       end
      end
      local d=shopData(s)

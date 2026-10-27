@@ -22,7 +22,7 @@ local function copy(t)
 end
 Profiles.Copy=copy
 local function new()
- return {Version=2,StylePacks={},UseTeamStyle=true,Coins=Catalog.Get("StarterCoins"),Gems=0,Owned={},Equipped={Theme="",Uniform="",Effect="",Emote="",StaffStyle="",ShopEffect="",TeamStyle=""},Shop={DecorSlots={},Bank=Catalog.Get("StarterBank"),Upgrades={Kitchen=0,Service=0,Decor=0},Workers={}},Receipts={}}
+ return {Version=2,StylePacks={},UseTeamStyle=true,Coins=Catalog.Get("StarterCoins"),Gems=0,Owned={},Equipped={Theme="",Uniform="",Effect="",Emote="",StaffStyle="",ShopEffect="",TeamStyle=""},Shop={DecorSlots={},Bank=Catalog.Get("StarterBank"),Upgrades={Kitchen=0,Service=0,Decor=0,Space=0},Workers={}},Receipts={}}
 end
 local function clean(d)
  if type(d)~="table" then d=new() end

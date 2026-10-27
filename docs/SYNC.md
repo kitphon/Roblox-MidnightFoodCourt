@@ -14,6 +14,12 @@ python tools/sync_bridge.py check
 การเชื่อมใน Studio ที่เปิดอยู่ตอนติดตั้งถูก bootstrap ผ่าน MCP และทดสอบแล้ว ส่วนการโหลด plugin อัตโนมัติหลังรีสตาร์ต Studio ยังไม่ได้ทดสอบแยก
 
 ## What is automatic
+### Required checkpoint after every task
+- Before reporting completion or starting the next task, Stop Play and sync all maintained scripts back into `src/`.
+- Export and review intentional Edit-mode scene/model changes into `assets/`; update mappings when needed, rebuild and verify. Runtime-only objects stay represented by their generating source.
+- Run a fresh `python tools/sync_bridge.py check` and require success with no pending changes, conflicts or unreviewed scene edits. Restarting the bridge or clearing `SceneDirty` does not replace export/review.
+- If blocked, preserve both sides and record the exact remaining sync/export work in HANDOFF and TESTING. Report the task as incomplete. Record Save/Publish separately.
+
 - Maintained scripts in src: file → Studio and Studio editor/MCP → file, polling every 2 seconds.
 - Uses the last shared version to distinguish one-sided edits from conflicts.
 - Before disk writes, stores the previous content in ignored .sync/backups/.
@@ -37,6 +43,7 @@ Read the versions under .sync/conflicts/<manifest index>/. Review/merge the inte
 For a scene warning: export/review the changed assets first, rebuild, then restart the bridge/plugin or have an agent clear SceneDirty only after confirming the export. Restarting is not proof that scene assets were exported.
 
 ## Controls / tools
+- `tools/review_scene.py` is a staging-only local receiver for SerializationService hex exports to `/asset/<manifest index>` on localhost:34876. It writes only ignored `.sync/scene-review/assets/`, never maintained assets. Stop it after exporting. Run `--project-only` after staging and build its review project, then `--compare` against `build/scene-before.rbxlx` / `build/scene-review.rbxlx`. The comparison ignores serialized referent IDs and normalizes duplicate sibling ordering; inspect references separately if bindings change. Only after reviewing results may scene state be acknowledged. Never treat the helper as an automatic asset promotion or a complete binding/terrain validator.
 - Toolbar Midnight Development: MidnightSyncStatus pauses/resumes; StopMidnightSync stops that Studio bridge.
 - Restart server after changes to its implementation:
 

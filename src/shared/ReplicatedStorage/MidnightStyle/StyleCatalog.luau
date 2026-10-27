@@ -18,7 +18,11 @@ Catalog.Items={
  {Id="serve_hearts",Name="Heart Service",Kind="ShopEffect",Gems=45,Color={255,125,156},Description="Floating hearts when an order is served."},
  {Id="serve_gold",Name="Golden Service",Kind="ShopEffect",Gems=65,Color={255,193,69},Description="Golden sparkles and a signature bell sound."},
  {Id="decor_aquarium",Name="Aquarium",Kind="Decoration",Gems=70,Slot="Patio",Color={70,178,209},Description="A lit fish tank beside your shop."},
- {Id="decor_plant",Name="Plant Corner",Kind="Decoration",Gems=25,Slot="Entrance",Color={102,170,103},Description="Potted plants beside the entrance."},
+ {Id="decor_plant",Name="Plant Corner",Kind="Decoration",Coins=350,Slot="Entrance",Color={102,170,103},Description="Standard decor · Buy with Coins. Potted plants beside the entrance."},
+ {Id="front_mint",Name="Mint Market Sign",Kind="Decoration",Coins=600,Slot="Front",Color={87,178,153},Description="Standard storefront · A mint rooftop sign. Buy once with Coins, equip anytime."},
+ {Id="front_sunset",Name="Sunset Kitchen Sign",Kind="Decoration",Coins=600,Slot="Front",Color={210,109,70},Description="Standard storefront · A warm terracotta rooftop sign. Buy with Coins."},
+ {Id="front_sakura",Name="Sakura Rooftop",Kind="Decoration",Gems=75,Slot="Front",Color={236,142,184},Description="Special storefront · Blossom clusters and a pink rooftop sign. Gems only."},
+ {Id="front_cosmic",Name="Cosmic Rooftop",Kind="Decoration",Gems=85,Slot="Front",Color={149,132,227},Description="Special storefront · A ringed planet and star accents. Gems only."},
  {Id="decor_neon",Name="Open Late Sign",Kind="Decoration",Gems=40,Slot="Wall",Color={105,234,201},Description="A neon wall sign with your shop name."},
  {Id="decor_speaker",Name="Music Corner",Kind="Decoration",Gems=45,Slot="Patio",Color={146,113,194},Description="Decorative speakers and a record player."},
  {Id="team_sakura",Name="Sakura Crew",Kind="TeamStyle",Gems=75,Color={172,97,125},Accent={255,218,227},Description="Matching player aprons and crew badges."},
@@ -60,7 +64,7 @@ function Catalog.Menu(themeId)
  for _,id in Recipes.Theme(themeId) do table.insert(skin.Labels,Recipes.Get(id).Name) end
  return skin
 end
-Catalog.Slots={"Entrance","Patio","Wall"}
+Catalog.Slots={"Entrance","Patio","Wall","Front"}
 function Catalog.Find(id)
  for _,list in {Catalog.Items,Catalog.Packs} do for _,item in list do if item.Id==id then return item end end end
 end

@@ -23,6 +23,21 @@ function R.Paint(model,item)
   end
  end
 end
+function R.MatchSurfaces(model)
+ local wall,floor=model:FindFirstChild("LeftWall"),model:FindFirstChild("ShopFloor")
+ local function match(target,source)
+  if target and source then
+   target.Color=source.Color;target.Material=source.Material
+   target.MaterialVariant=source.MaterialVariant;target.Reflectance=source.Reflectance
+  end
+ end
+ for _,name in {"BackroomLeft","BackroomRight","BackroomWall","BackDoorHeader"} do match(model:FindFirstChild(name),wall) end
+ local layout=model:FindFirstChild("BackroomLayout")
+ if layout then for _,name in {"OfficeDivider","OfficeDoorSide","OfficeDoorHeader"} do match(layout:FindFirstChild(name),wall) end end
+ match(model:FindFirstChild("BackroomFloor"),floor)
+ local dining=model:FindFirstChild("DiningExpansion")
+ if dining then match(dining:FindFirstChild("ExpandedFloor"),floor) end
+end
 function R.BuildMenu(model,themeId,parent)
  local skin=Catalog.Menu(themeId)
  local floor=model.ShopFloor
@@ -36,8 +51,15 @@ function R.BuildMenu(model,themeId,parent)
  end
  textLabel(gui,"MenuTitle",skin.Title,24,8,912,42,col(skin.Accent),30)
  local foodIds=Recipes.MenuForModel(model,themeId)
+ -- Cards mirror the physical station line as seen from the dining side (F E D C B A, Station A on the right).
+ -- Stations A-C share one row; once D-F unlock they take the row above so the board reads F..A left to right.
+ local function cardCell(i,food)
+  local s=Recipes.CookingSlot(food) or i
+  return 2-((s-1)%3),(#foodIds>3 and s<=3) and 1 or 0
+ end
  for i,food in foodIds do
-  local card=Instance.new("Frame");card.Name=food;card.Position=UDim2.fromOffset(20+((i-1)%3)*314,54+math.floor((i-1)/3)*120);card.Size=UDim2.fromOffset(292,114);card.BackgroundColor3=col(skin.Background):Lerp(col(skin.Text),.08);card.BorderSizePixel=0;card.Parent=gui
+  local column,row=cardCell(i,food)
+  local card=Instance.new("Frame");card.Name=food;card.Position=UDim2.fromOffset(20+column*314,54+row*120);card.Size=UDim2.fromOffset(292,114);card.BackgroundColor3=col(skin.Background):Lerp(col(skin.Text),.08);card.BorderSizePixel=0;card.Parent=gui
   local corners=Instance.new("UICorner");corners.CornerRadius=UDim.new(0,skin.Radius);corners.Parent=card
   -- Display the actual dish geometry in a recessed menu display, rather than a separate drawing.
   local recipe=Recipes.Get(food)
@@ -46,8 +68,8 @@ function R.BuildMenu(model,themeId,parent)
   local bounds,size=miniature:GetBoundingBox()
   miniature:ScaleTo(math.min(.65/size.X,.48/size.Y,.45/size.Z))
   bounds,size=miniature:GetBoundingBox()
-  local pixelX=20+((i-1)%3)*314+146
-  local pixelY=54+math.floor((i-1)/3)*120+35
+  local pixelX=20+column*314+146
+  local pixelY=54+row*120+35
   local center=board.CFrame:PointToWorldSpace(Vector3.new((.5-pixelX/960)*board.Size.X,(.5-pixelY/300)*board.Size.Y,-board.Size.Z/2-size.Z/2-.025))
   miniature:PivotTo(CFrame.new(center-bounds.Position)*miniature:GetPivot())
   miniature:SetAttribute("DisplayRecipe",food)
@@ -68,7 +90,14 @@ function R.Build(model,themeId,slots,parent,name)
   local shownSlots={}
   for _,id in Recipes.MenuForModel(model,themeId) do
    local recipe=Recipes.Get(id);local station=model:FindFirstChild(recipe.Station)
-   if station and not shownSlots[recipe.Slot] then shownSlots[recipe.Slot]=true;local dish=FoodFactory.Build(recipe,folder,"StationDish_"..id);dish:PivotTo(station.CFrame*CFrame.new(0,station.Size.Y/2+.12,0)) end
+   if station and not shownSlots[recipe.CookingSlot] then
+    shownSlots[recipe.CookingSlot]=true
+    local dish=FoodFactory.Build(recipe,folder,"StationDish_"..id)
+    local _,size=dish:GetBoundingBox()
+    -- Plating spot on the front-left; the right side and back hold the station's cooking gear (ShopService StationGear).
+    dish:ScaleTo(math.min(dish:GetScale(),1.85/size.X,1.7/size.Z))
+    dish:PivotTo(station.CFrame*CFrame.new(-.9,station.Size.Y/2+.12,-.55))
+   end
   end
  end
  if item and item.Kind=="Theme" then
@@ -130,7 +159,28 @@ function R.Build(model,themeId,slots,parent,name)
   if not decor or decor.Kind~="Decoration" or decor.Slot~=slot then continue end
   local base=slot=="Entrance" and at(-19,0,-7) or slot=="Patio" and at(30,0,1) or at(8,6.8,9.1)
   local c=col(decor.Color)
-  if id=="decor_plant" then
+  if slot=="Front" then
+   local position=at(0,13.5,-11.3)
+   local title=({front_mint="FRESH & HOT",front_sunset="COZY BITES",front_sakura="SAKURA KITCHEN",front_cosmic="COSMIC BITES"})[id] or "MIDNIGHT KITCHEN"
+   local board=sign(folder,"FrontFeatureSign",title,position,Vector2.new(14,2.2),Color3.fromRGB(250,239,212))
+   board.Color=c:Lerp(Color3.new(),.45)
+   for _,x in {-7.2,7.2} do part(folder,"FrontFeaturePost",Vector3.new(.22,2.5,.22),position+Vector3.new(x,-.4,.15),c,Enum.Material.Metal) end
+   for _,y in {-1.2,1.2} do part(folder,"FrontFeatureTrim",Vector3.new(14.6,.15,.2),position+Vector3.new(0,y,-.1),c,id=="front_cosmic" and Enum.Material.Neon or Enum.Material.SmoothPlastic) end
+   if id=="front_sakura" then
+    for _,x in {-6,6} do for i=1,5 do local a=i*math.pi*2/5
+     local petal=part(folder,"SakuraPetal",Vector3.new(.85,.85,.3),position+Vector3.new(x+math.cos(a)*.55,2+math.sin(a)*.55,0),c);petal.Shape=Enum.PartType.Ball;petal.CastShadow=false
+    end local center=part(folder,"BlossomCenter",Vector3.new(.45,.45,.35),position+Vector3.new(x,2,-.1),Color3.fromRGB(255,215,115));center.Shape=Enum.PartType.Ball end
+   elseif id=="front_cosmic" then
+    local center=position+Vector3.new(0,3,0)
+    local planet=part(folder,"RoofPlanet",Vector3.new(2.3,2.3,2.3),center,c);planet.Shape=Enum.PartType.Ball
+    for i=1,16 do local a=i*math.pi*2/16;local b=(i+1)*math.pi*2/16
+     local from=center+Vector3.new(math.cos(a)*1.85,math.sin(a)*.4,math.sin(a)*.65)
+     local to=center+Vector3.new(math.cos(b)*1.85,math.sin(b)*.4,math.sin(b)*.65)
+     local ring=part(folder,"PlanetRing",Vector3.new(.12,.12,(to-from).Magnitude+.04),(from+to)/2,Color3.fromRGB(130,221,234),Enum.Material.Neon);ring.CFrame=CFrame.lookAt((from+to)/2,to);ring.CastShadow=false
+    end
+    for _,x in {-5,5} do local star=part(folder,"RoofStar",Vector3.new(.8,.8,.12),position+Vector3.new(x,2.1,0),Color3.fromRGB(248,213,119),Enum.Material.Neon);star.Rotation=Vector3.new(0,0,45) end
+   end
+  elseif id=="decor_plant" then
    for _,x in {-.9,.9} do
     part(folder,"PlantPot",Vector3.new(1,1,1),base+Vector3.new(x,.5,0),Color3.fromRGB(167,112,75))
     part(folder,"PlantStem",Vector3.new(.15,1.2,.15),base+Vector3.new(x,1.5,0),c)

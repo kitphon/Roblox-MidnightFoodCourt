@@ -82,8 +82,9 @@ local function thumbnail(parent,item,width)
   end
   target=Vector3.new(0,3,-3);from=Vector3.new(10,8,-18)
  elseif item.Kind=="Decoration" then
-  target=item.Slot=="Patio" and Vector3.new(30,2,1) or item.Slot=="Entrance" and Vector3.new(-19,1,-7) or Vector3.new(8,7,9)
+  target=item.Slot=="Front" and Vector3.new(0,15,-11.3) or item.Slot=="Patio" and Vector3.new(30,2,1) or item.Slot=="Entrance" and Vector3.new(-19,1,-7) or Vector3.new(8,7,9)
   from=target+Vector3.new(8,6,-11)
+  if item.Slot=="Front" then from=target+Vector3.new(12,7,-23) end
  elseif item.Kind=="ShopEffect" then
   local icon=text(parent,item.Id=="serve_hearts" and "♥" or "★",12,15,width,100,60,Color3.fromRGB(unpack(item.Color)));icon.TextXAlignment=Enum.TextXAlignment.Center;v.Visible=false
  end
@@ -321,11 +322,11 @@ local function command(action,id)
  message.Text=ok and result.Message or "Connection interrupted. Try again."
  task.wait(.2);busy=false;refresh()
 end
-local function itemState(frame,action,owned,equipped,cost)
+local function itemState(frame,action,owned,equipped,cost,currency)
  local badge=Instance.new("TextLabel");badge.Name="OwnershipBadge";badge.Size=UDim2.fromOffset(112,26);badge.Position=UDim2.fromOffset(cardWidth-124,14)
  badge.Font=Enum.Font.GothamBold;badge.TextSize=11;badge.BorderSizePixel=0
  badge.BackgroundColor3=equipped and Color3.fromRGB(29,105,76) or owned and Color3.fromRGB(38,64,85) or Color3.fromRGB(82,61,27)
- badge.TextColor3=C.white;badge.Text=equipped and "✓ EQUIPPED" or owned and "OWNED" or cost and (tostring(cost).." GEMS") or "PREMIUM PACK";badge.Parent=frame;round(badge)
+ badge.TextColor3=C.white;badge.Text=equipped and "✓ EQUIPPED" or owned and "OWNED" or cost and (tostring(cost).." "..(currency or "GEMS")) or "PREMIUM PACK";badge.Parent=frame;round(badge)
  if action then
   action:SetAttribute("ItemState",equipped and "Equipped" or owned and "Owned" or "Unowned")
   if action.Active then
@@ -435,18 +436,20 @@ render=function()
    local f=card(item)
    local equipped=item.Kind=="Decoration" and snapshot.Style.DecorSlots[item.Slot]==item.Id or eq[item.Kind]==item.Id
    button(f,"Preview",12,238,(cardWidth-36)/2,40,function() preview(item) end)
-   local label=own[item.Id] and (equipped and (item.Kind=="Decoration" and "Remove" or "Unequip") or item.Kind=="Decoration" and "Place · "..item.Slot or "Equip") or snapshot.Gems<item.Gems and "Get Gems" or "Buy · "..tostring(item.Gems).." Gems"
-   local enabled=(not own[item.Id] or snapshot.Owner)==true
+   local currency=item.Coins~=nil and "Coins" or "Gems"
+   local price=item[currency];local affordable=(snapshot[currency] or 0)>=price
+   local label=own[item.Id] and (equipped and (item.Kind=="Decoration" and "Remove" or "Unequip") or item.Kind=="Decoration" and "Place · "..item.Slot or "Equip") or not affordable and (currency=="Gems" and "Get Gems" or "Need "..price.." Coins") or "Buy · "..price.." "..currency
+   local enabled=(own[item.Id] and snapshot.Owner or not own[item.Id] and (affordable or currency=="Gems"))==true
    local b=button(f,label,24+(cardWidth-36)/2,238,(cardWidth-36)/2,40,function()
-    if not own[item.Id] and snapshot.Gems<item.Gems then currentTab="Gems";content.CanvasPosition=Vector2.zero;render()
+    if not own[item.Id] and not affordable and currency=="Gems" then currentTab="Gems";content.CanvasPosition=Vector2.zero;render()
     elseif not own[item.Id] then command("StyleBuy",item.Id)
     elseif item.Kind=="Decoration" and equipped then command("StylePlace",item.Slot..":")
     else command("StyleEquip",item.Id) end
    end,C.gold,enabled)
-   itemState(f,b,own[item.Id],equipped,item.Gems)
+   itemState(f,b,own[item.Id],equipped,price,currency:upper())
    b.Name="ItemAction_"..item.Id
    if own[item.Id] and not snapshot.Owner then b.Text="Owned · owner only"
-   elseif not own[item.Id] and snapshot.Gems<item.Gems then b.BackgroundColor3=Color3.fromRGB(155,119,229);b.TextColor3=C.bg end
+   elseif not own[item.Id] and not affordable and currency=="Gems" then b.BackgroundColor3=Color3.fromRGB(155,119,229);b.TextColor3=C.bg end
   end
   if currentTab=="Outfits" then
    local f=card({Id="crew_option",Name="Your crew outfit",Description="Choose whether to wear the shop owner's team uniform.",Kind="ShopEffect",Color={112,232,197}})
@@ -501,7 +504,7 @@ for i,name in ipairs(categories) do
  tabButtons[name]=b
 end
 local closeButton=button(panel,"×",926,14,38,38,close,C.panel);closeButton.TextColor3=C.white;closeButton.TextSize=24
-local backManageButton=button(panel,"Back to Manage",20,598,170,40,function()
+local backManageButton=button(panel,"Back to Kitchen",20,598,170,40,function()
  close()
  local event=player.PlayerGui:FindFirstChild("OpenMidnightManagement")
  if event then event:Fire("Overview") end

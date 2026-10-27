@@ -63,19 +63,26 @@ local function icon(m,food)
 end
 function Flow.Clear(shop)
  clearCompanions(shop)
+ local shadow=shop.Model:FindFirstChild("BanishShadow");if shadow then shadow:Destroy() end
  if shop.Customer then local m=shop.Customer;shop.Customer=nil;m:Destroy() end
  shop.CustomerStage="Idle";shop.CustomerName=""
 end
 function Flow.Shadow(shop,enabled)
- local m=shop.Customer
- if not m or m:GetAttribute("Activity")~="Ordering" then return end
- m:SetAttribute("Shadow",enabled)
- for _,p in ipairs(m:GetChildren()) do if p:IsA("BasePart") and p.Transparency<1 then
-  if not p:GetAttribute("NormalColor") then p:SetAttribute("NormalColor",p.Color) end
-  if p.Name=="Eye" then p.Color=enabled and Color3.fromRGB(255,65,81) or p:GetAttribute("NormalColor")
-  else p.Color=enabled and Color3.fromRGB(16,17,24) or p:GetAttribute("NormalColor") end
- end end
- icon(m,enabled and "WARD" or shop.Order)
+ local old=shop.Model:FindFirstChild("BanishShadow");if old then old:Destroy() end
+ if not enabled or not shop.Customer then return end
+ -- A separate apparition leaves the actual guest and their order untouched.
+ local m=shop.Customer:Clone();m.Name="BanishShadow";m:SetAttribute("Activity","Shadow");m:SetAttribute("Shadow",true)
+ for _,p in ipairs(m:GetDescendants()) do
+  if p:IsA("BillboardGui") or p.Name=="OrderIcon" then p:Destroy()
+  elseif p:IsA("BasePart") then
+   p.CanCollide=false;p.CanTouch=false;p.CanQuery=false
+   p.Color=p.Name=="Eye" and Color3.fromRGB(255,65,81) or Color3.fromRGB(16,17,24)
+  end
+ end
+ local ward,radio=shop.Model.Ward,shop.Model.Radio
+ local foot=ward.Position+Vector3.new(0,ward.Size.Y/2,0)
+ m:PivotTo(CFrame.lookAt(foot,Vector3.new(radio.Position.X,foot.Y,radio.Position.Z)))
+ m.Parent=shop.Model
 end
 function Flow.Spawn(shop,food,onArrive)
  -- Keep the actual waiting party guests and promote each one to the counter.

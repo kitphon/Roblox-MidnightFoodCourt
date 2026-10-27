@@ -17,6 +17,49 @@ local function ensure(d)
  return d
 end
 local function rgb(v) return Color3.fromRGB(unpack(v)) end
+-- Match each ingredient kit to the dishes currently offered by that station.
+function Style.UpdateIngredientGuides(model,themeId)
+ local layout=model:FindFirstChild("BackroomLayout")
+ if not layout then return end
+ local menu=Recipes.MenuForModel(model,themeId)
+ local key=table.concat(menu,"|")
+ if model:GetAttribute("IngredientGuideKey")==key and model:FindFirstChild("IngredientGuides") then return end
+ local old=model:FindFirstChild("IngredientGuides");if old then old:Destroy() end
+ local folder=Instance.new("Folder");folder.Name="IngredientGuides";folder.Parent=model
+ local groups={{Letter="A",Name="PREP",Bin="StockNoodles",Color={238,188,82}},
+  {Letter="B",Name="KITCHEN",Bin="StockRice",Color={225,133,71}},
+  {Letter="C",Name="DRINKS",Bin="StockTea",Color={94,195,158}}}
+ local names={{},{},{}}
+ for _,id in menu do local recipe=Recipes.Get(id);table.insert(names[recipe.Slot],recipe.Name) end
+ local function board(name,pos,width,height,color,title,description)
+  local p=Instance.new("Part");p.Name=name;p.Size=Vector3.new(width,height,.12);p.Position=pos;p.Anchored=true;p.CanCollide=false;p.CanQuery=false;p.Color=Color3.fromRGB(18,32,39);p.Parent=folder
+  local gui=Instance.new("SurfaceGui");gui.Name="IngredientGuide";gui.Adornee=p;gui.Face=Enum.NormalId.Front;gui.CanvasSize=Vector2.new(700,240);gui.LightInfluence=0;gui.Parent=p
+  local heading=Instance.new("TextLabel");heading.Name="Route";heading.Size=UDim2.fromScale(1,.36);heading.BackgroundColor3=color;heading.BorderSizePixel=0;heading.Text=title;heading.TextColor3=Color3.fromRGB(18,32,39);heading.Font=Enum.Font.GothamBlack;heading.TextSize=48;heading.Parent=gui
+  local dishes=Instance.new("TextLabel");dishes.Name="FoodNames";dishes.Position=UDim2.fromScale(.025,.39);dishes.Size=UDim2.fromScale(.95,.58);dishes.BackgroundTransparency=1;dishes.Text=description;dishes.TextColor3=Color3.fromRGB(245,242,227);dishes.Font=Enum.Font.GothamBold;dishes.TextSize=38;dishes.TextWrapped=true;dishes.Parent=gui
+ end
+ for slot,spec in groups do
+  local bin=model:FindFirstChild(spec.Bin);local station=model:FindFirstChild(Recipes.Stations[slot])
+  if bin and station then
+   local color=rgb(spec.Color);local title=spec.Letter.." + "..string.char(67+slot).." / "..spec.Name
+   -- Sit on top of the rack (above its top deck, centred over the shelf) so the ingredient stock stays visible
+   -- and the raised INGREDIENTS header on the divider wall can still be read over it from the aisle.
+   board("StockGuide_"..slot,bin.Position+Vector3.new(0,6.15,0),6.9,2.05,color,title,table.concat(names[slot],"\n"))
+   local prompt=bin:FindFirstChild("TakeStock")
+   if prompt then prompt.ObjectText=spec.Letter.." / "..spec.Name.." • "..table.concat(names[slot]," + ") end
+  end
+ end
+ local full=Recipes.FullMenuForModel(model,themeId)
+ for slot,name in Recipes.Stations do
+  local station=model:FindFirstChild(name);local recipe=Recipes.Get(full[slot])
+  if station and recipe then
+   local unlocked=table.find(menu,recipe.Id)~=nil
+   local color=unlocked and rgb(groups[recipe.Slot].Color) or Color3.fromRGB(111,119,126)
+   board("StationGuide_"..slot,station.CFrame:PointToWorldSpace(Vector3.new(0,0,-station.Size.Z/2-.08)),math.min(5.4,station.Size.X-.4),1.2,color,"STATION "..string.char(64+slot),unlocked and recipe.Name or "LOCKED • LV. "..recipe.UnlockLevel)
+   folder["StationGuide_"..slot].CFrame=CFrame.new(folder["StationGuide_"..slot].Position)*station.CFrame.Rotation
+  end
+ end
+ model:SetAttribute("IngredientGuideKey",key)
+end
 function Style.GrantPack(player,id)
  local pack=Catalog.Find(id);if not pack or not pack.Items then return false,"Unknown pack" end
  return Profiles.Mutate(player,function(d)
@@ -50,6 +93,8 @@ function Style.Apply(shop)
  local d=shop.Owner and Profiles.Get(shop.Owner)
  local eq=d and ensure(d).Equipped or {}
  local slots=d and d.Shop.DecorSlots or {}
+ if Style.Service and Style.Service.RefreshStationGear then Style.Service.RefreshStationGear(shop.Model,eq.Theme or "") end
+ Style.UpdateIngredientGuides(shop.Model,eq.Theme or "")
  local key=tostring(shop.Owner and shop.Owner.UserId or 0)..":"..(eq.Theme or "")..":"..Http:JSONEncode(slots)
  if shop.StyleKey~=key then
   shop.StyleKey=key
@@ -77,6 +122,8 @@ function Style.Apply(shop)
   local old=shop.Model:FindFirstChild("ShopStyle");if old then old:Destroy() end
   Renderer.Build(shop.Model,eq.Theme,slots)
  end
+ -- Also covers newly purchased expansions when the equipped theme is unchanged.
+ Renderer.MatchSurfaces(shop.Model)
  local employees=shop.Model:FindFirstChild("Employees")
  local outfit=Catalog.Find(eq.StaffStyle)
  if employees then for _,m in employees:GetChildren() do
@@ -181,9 +228,12 @@ function Style.Command(player,action,id)
  if action=="StyleBuy" then
   local ok,msg=Profiles.Mutate(player,function(profile)
    ensure(profile);if profile.Owned[id] then return false,"Already owned" end
-   local price=math.max(0,math.floor(item.Gems))
-   if profile.Gems<price then return false,"Not enough Gems" end
-   profile.Gems-=price;profile.Owned[id]=true;return true,item.Name.." unlocked"
+   -- Price/currency are server catalog values; the client only supplies the item id.
+   local currency=item.Coins~=nil and "Coins" or "Gems"
+   local amount=item[currency]
+   if type(amount)~="number" or amount<0 or amount%1~=0 then return false,"Item price unavailable" end
+   if (profile[currency] or 0)<amount then return false,"Not enough "..currency end
+   profile[currency]-=amount;profile.Owned[id]=true;return true,item.Name.." unlocked"
   end)
   Style.Service.SyncPlayer(player);return ok,msg
  elseif action=="StyleEquip" then

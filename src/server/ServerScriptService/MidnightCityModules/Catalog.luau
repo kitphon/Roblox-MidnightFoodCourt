@@ -14,7 +14,8 @@ Catalog.Items={
 Catalog.Upgrades={
  {Id="Kitchen",Name="Kitchen",Price=250,Max=3,Description="Cook faster at each level"},
  {Id="Service",Name="Service",Price=200,Max=3,Description="More patient customers"},
- {Id="Decor",Name="Decor",Price=220,Max=3,Description="Higher earnings per order"}
+ {Id="Decor",Name="Decor",Price=220,Max=3,Description="Higher earnings per order"},
+ {Id="Space",Name="Dining Area",Price=300,Max=3,Description="Expand the shop with more seating and a larger covered floor"}
 }
 Catalog.Workers={
  {Id="Chef",Name="NPC Chef",Price=300,Description="Cooks the correct dish every 9 seconds"},

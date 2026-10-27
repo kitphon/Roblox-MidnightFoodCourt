@@ -113,7 +113,7 @@ function S.Start(service)
  Marketplace.PromptGamePassPurchaseFinished:Connect(function(player,id,purchased)
   if not purchased or id~=passId() or id<=0 then return end
   if Profiles.Get(player) and S.Check(player,true) then
-   RS.MidnightNetwork.Notice:FireClient(player,"Shop Save Slot unlocked permanently. Open Kitchen > Saves.")
+   RS.MidnightNetwork.Notice:FireClient(player,"Shop Save Slot unlocked permanently. Open Kitchen > Overview > Save / Load design.")
    service.SyncPlayer(player)
   end
  end)

@@ -54,6 +54,10 @@ end
 function E.Training(shop)
  local d=shop.Owner and Profiles.Get(shop.Owner);return d and (d.TutorialStep or 1)<=4
 end
+-- The whole five-step guide (including the Upgrade Desk step) pauses customer patience.
+function E.TutorialActive(shop)
+ local d=shop.Owner and Profiles.Get(shop.Owner);return d~=nil and (d.TutorialStep or 1)<=5
+end
 function E.BeginShift(shop)
  shop.ShiftGoals={Manual=0,Perfect=0,Refills=0,Paid={}}
  shop.PartyRemaining=0;shop.PartySize=0;shop.PartyIndex=0
@@ -157,7 +161,7 @@ function E.TimingScore(phase,target)
  local quality=distance<=.075 and "Perfect" or distance<=.22 and "Good" or distance<=.4 and "Fair" or "Poor"
  return quality,score
 end
-function E.Skill(player)
+function E.Skill(player,clientPhase)
  local pd=E.Service.PlayerData[player];local shop=pd and E.Service.Shops[pd.ShopId]
  if not shop or not shop.Members[player] or shop.Phase~="Playing" or pd.Cooking=="" or pd.SkillHit then return false,"No cooking action available" end
  local now=workspace:GetServerTimeNow();local started=pd.CookEnd-(pd.CookDuration or 1)
@@ -167,6 +171,9 @@ function E.Skill(player)
  if not station or not root or (root.Position-station.Position).Magnitude>10 then return false,"Stay at your cooking station" end
  pd.SkillHit=true
  local phase=(now-started)/pd.CookDuration
+ -- Score the marker position the player actually saw, while rejecting stale/spoofed reports.
+ local reported=tonumber(clientPhase)
+ if reported and reported>=0 and reported<=1 and math.abs(reported-phase)<=.12 then phase=reported end
  local quality,score=E.TimingScore(phase,pd.SkillTarget or .65)
  pd.CookQuality=quality;pd.CookScore=score;E.Tutorial(player,"Skill")
  RS.MidnightFeedback:FireClient(player,quality,score);E.Service.Sync(shop)
@@ -229,31 +236,19 @@ function E.Visuals(shop)
    if label then label.Text=d.Shop.FeatureSlot==i and "HOUSE SPECIAL +15%" or "MADE TO ORDER" end
   end
  end
- if old and old:GetAttribute("Tier")==level then return end
+ local diningLevel=d.Shop.Upgrades.Space or 0
+ if old and old:GetAttribute("Tier")==level and old:GetAttribute("DiningLevel")==diningLevel then return end
  if old then old:Destroy() end
- local folder=Instance.new("Folder");folder.Name="CareerDisplay";folder:SetAttribute("Tier",level);folder.Parent=shop.Model
+ local folder=Instance.new("Folder");folder.Name="CareerDisplay";folder:SetAttribute("Tier",level);folder:SetAttribute("DiningLevel",diningLevel);folder.Parent=shop.Model
  local origin=shop.Model.ShopFloor.Position+Vector3.new(0,.5,0)
  local function part(name,size,offset,color)
   local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=origin+offset;p.Color=color;p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;p.TopSurface=Enum.SurfaceType.Smooth;p.Parent=folder;return p
  end
- local plaque=part("ReputationPlaque",Vector3.new(5,1,.12),Vector3.new(-9,8.8,9.35),Color3.fromRGB(30,47,51))
+ -- Keep the rank plaque on the left wall area, clear of the themed food menu.
+ local plaque=part("ReputationPlaque",Vector3.new(5,1,.12),Vector3.new(-11.5,8.8,9.35),Color3.fromRGB(30,47,51))
  local gui=Instance.new("SurfaceGui");gui.Face=Enum.NormalId.Front;gui.CanvasSize=Vector2.new(500,100);gui.LightInfluence=0;gui.Parent=plaque
  local text=Instance.new("TextLabel");text.Size=UDim2.fromScale(1,1);text.BackgroundTransparency=1;text.Font=Enum.Font.GothamBold;text.TextScaled=true;text.TextColor3=Color3.fromRGB(255,200,100);text.Text="★ "..tier.Name;text.Parent=gui
- if level>=2 then
-  local ground=shop.Model.Pavement.Position.Y+shop.Model.Pavement.Size.Y/2
-  local platform=part("UnlockedPatio",Vector3.new(6,.2,math.min(level-1,3)*4),Vector3.new(33,.1,math.min(level-1,3)*2-1),Color3.fromRGB(106,89,69))
-  platform.Position=Vector3.new(origin.X+33,ground+.1,origin.Z+math.min(level-1,3)*2-1);platform.CanCollide=true
-  for i=1,math.min(level-1,3) do
-   local z=(i-1)*4+1
-   local tabletop=part("UnlockedTable",Vector3.new(2.5,.2,2.5),Vector3.new(33,2.6,z),Color3.fromRGB(151,104,65))
-   local tableleg=part("TableLeg",Vector3.new(.25,2.4,.25),Vector3.new(33,1.3,z),Color3.fromRGB(55,69,74))
-   tabletop.Position=Vector3.new(origin.X+33,ground+2.6,origin.Z+z);tabletop.CanCollide=true
-   tableleg.Position=Vector3.new(origin.X+33,ground+1.3,origin.Z+z)
-   for _,x in {31.2,34.8} do
-    local seat=Instance.new("Seat");seat.Name="UnlockedSeat";seat.Size=Vector3.new(1.2,.2,1.2);seat.CFrame=CFrame.lookAt(Vector3.new(origin.X+x,ground+1.5,origin.Z+z),Vector3.new(origin.X+33,ground+1.5,origin.Z+z));seat.Color=Color3.fromRGB(112,174,157);seat.Anchored=true;seat.CanCollide=true;seat.Parent=folder
-   end
-  end
- end
+ -- Seating is purchased through upgrades, never granted by career rank.
  if level>=3 then
   for _,name in Recipes.Stations do
    local station=shop.Model:FindFirstChild(name)
@@ -276,7 +271,7 @@ function E.Sync(shop,state,player,pd)
  local attrs={RestaurantTier=level,RestaurantRank=tier.Name..(stars>0 and (" ★"..stars) or ""),LegendStars=stars,CareerServed=c.Served,CareerPerfect=c.Perfect,NextRankAt=nextAt,
  ReviewScore=c.Reviews>0 and c.ReviewTotal/c.Reviews or 0,CustomerKind=shop.CustomerKind or "Guest",CustomerTitle=shop.CustomerTitle or "",CustomerBonusPct=math.floor(((shop.CustomerBonus or 1)-1)*100+.5),PartyIndex=shop.CustomerKind=="Party" and (shop.PartyIndex or 0) or 0,PartySize=shop.CustomerKind=="Party" and (shop.PartySize or 0) or 0,Popularity=d and E.Popularity(d) or 0,RushUntil=shop.RushUntil or 0,RushSeconds=math.max(0,math.ceil((shop.RushUntil or 0)-workspace:GetServerTimeNow())),RegularLevel=shop.CustomerRegularLevel or 0,
  SkillTarget=pd.SkillTarget or .65,SkillHit=pd.SkillHit==true,CookQuality=pd.CookQuality or "",HeldQuality=pd.HeldQuality or "Normal",CookScore=pd.CookScore or 0,HeldScore=pd.HeldScore or 0,
- TutorialStep=personal and (personal.TutorialStep or 1) or 1,TeamPing=ping and ping.Message or "",PingStation=ping and ping.Station or "",
+ TutorialStep=personal and (personal.TutorialStep or 1) or 1,RefillTaught=personal and personal.RefillTaught==true or false,TeamPing=ping and ping.Message or "",PingStation=ping and ping.Station or "",
  GoalManual=g.Manual or 0,GoalPerfect=g.Perfect or 0,GoalRefills=g.Refills or 0,FeatureSlot=d and d.Shop.FeatureSlot or 0}
  for k,v in attrs do state:SetAttribute(k,v) end
 end
@@ -295,7 +290,7 @@ function E.Command(player,action,id)
   return Profiles.Mutate(player,function(d) d.TutorialStep=action=="TutorialSkip" and 6 or 1;return true,action=="TutorialSkip" and "Training skipped. Replay anytime in Journey." or "Training restarted. Follow the guide." end)
  end
  if not shop or not shop.Members[player] then return false,"Join a kitchen first" end
- if action=="CookSkill" then return E.Skill(player) end
+ if action=="CookSkill" then return E.Skill(player,id) end
  if action=="SignatureMenu" then
   if shop.Owner~=player then return false,"Owner only" end
   if E.Tier(Profiles.Get(player))<3 then return false,"Reach City Hotspot to unlock Signature Chicken Rice" end

@@ -1,4 +1,4 @@
-local R={All={},ById={},Menus={},Stations={"NoodleStation","RiceStation","TeaStation"},StockIds={"NOODLES","FRIED RICE","THAI TEA"}}
+local R={All={},ById={},Menus={},Stations={"NoodleStation","RiceStation","TeaStation","CookingStationD","CookingStationE","CookingStationF"},StockIds={"NOODLES","FRIED RICE","THAI TEA"}}
 local function menu(theme,entries)
  local ids={}
  for slot,entry in ipairs(entries) do
@@ -33,6 +33,15 @@ for theme,entries in pairs(additions) do
  end
 end
 for _,recipe in R.All do recipe.UnlockLevel=recipe.UnlockLevel or 1 end
+-- Ingredient Slot stays A/B/C for compatible stock; CookingSlot is the fixed six-bay menu position.
+for _,ids in R.Menus do for index,id in ids do local recipe=R.ById[id];recipe.CookingSlot=index;recipe.Station=R.Stations[index] end end
+special.CookingSlot=2
+function R.CookingSlot(id) local recipe=R.Get(id);return recipe and recipe.CookingSlot end
+function R.FullMenuForModel(model,theme)
+ local ids=table.clone(R.Theme(theme))
+ if model:GetAttribute("SignatureMenu") then ids[2]="SIGNATURE_RICE" end
+ return ids
+end
 function R.Unlocked(theme,level)
  local out={};for _,id in R.Theme(theme) do if R.Get(id).UnlockLevel<=(level or 1) then table.insert(out,id) end end;return out
 end

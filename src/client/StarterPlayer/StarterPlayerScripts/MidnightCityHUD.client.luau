@@ -4,6 +4,7 @@ local Tween=game:GetService("TweenService")
 local Run=game:GetService("RunService")
 local SoundService=game:GetService("SoundService")
 local player=Players.LocalPlayer
+local thai=game:GetService("LocalizationService").RobloxLocaleId:lower():sub(1,2)=="th"
 local state=player:WaitForChild("MidnightState")
 local icons=game.ReplicatedStorage:WaitForChild("MidnightIcons")
 local Recipes=require(game.ReplicatedStorage:WaitForChild("MidnightStyle"):WaitForChild("RecipeCatalog"))
@@ -103,7 +104,8 @@ local combo=text(canvas,"",330,305,300,28,29,C.gold)
 local taskCard=card(300,520,360,98)
 local changeTask=icon(taskCard,"BELL",0,0,100,94,1.1,.85)
 local taskLabel=text(taskCard,"START SHIFT",95,12,250,30,22,C.white)
-local keyLabel=text(taskCard,"Go to the golden bell",95,49,250,25,14,C.gold)
+local keyLabel=text(taskCard,"Go to the golden bell",95,46,250,42,14,C.gold);keyLabel.TextWrapped=true;keyLabel.TextYAlignment=Enum.TextYAlignment.Top
+if game.UserInputService.TouchEnabled then keyLabel.TextSize=17 end
 local action=Instance.new("TextButton");action.Size=UDim2.fromScale(1,1);action.Text="";action.BackgroundTransparency=1;action.Parent=taskCard
 local cookingCard=card(300,435,360,65);cookingCard.Visible=false
 local changeCooking=icon(cookingCard,"",0,0,72,62,1.1)
@@ -113,12 +115,13 @@ local eventCard=card(332,125,296,90);eventCard.Visible=false
 local changeEvent=icon(eventCard,"FUSE",0,0,90,82)
 local eventText=text(eventCard,"",85,10,205,36,21,C.red)
 local eventbar=bar(eventCard,99,64,178,C.red)
-local result=card(260,220,440,220);result.Name="ShiftResult";result.Visible=false
+local result=card(260,210,440,244);result.Name="ShiftResult";result.Visible=false
 local resultDismissed=false
 local resultTitle=text(result,"",20,10,400,50,32,C.gold)
-local resultCash=text(result,"",20,68,400,45,26,C.mint)
-text(result,"Ring the bell to start a new shift",20,124,400,26,16,C.white)
-local acknowledge=Instance.new("TextButton");acknowledge.Name="Acknowledge";acknowledge.Position=UDim2.fromOffset(130,164);acknowledge.Size=UDim2.fromOffset(180,42);acknowledge.BackgroundColor3=C.mint;acknowledge.TextColor3=C.bg;acknowledge.Text="OK";acknowledge.TextSize=20;acknowledge.Font=Enum.Font.GothamBold;acknowledge.BorderSizePixel=0;acknowledge.Parent=result;rounded(acknowledge,10)
+local resultCash=text(result,"",20,62,400,40,26,C.mint)
+local resultGoal=text(result,"",20,104,400,24,17,C.gold);resultGoal.Name="NextGoal"
+text(result,"Ring the bell to start a new shift",20,134,400,26,16,C.white)
+local acknowledge=Instance.new("TextButton");acknowledge.Name="Acknowledge";acknowledge.Position=UDim2.fromOffset(130,180);acknowledge.Size=UDim2.fromOffset(180,42);acknowledge.BackgroundColor3=C.mint;acknowledge.TextColor3=C.bg;acknowledge.Text="OK";acknowledge.TextSize=20;acknowledge.Font=Enum.Font.GothamBold;acknowledge.BorderSizePixel=0;acknowledge.Parent=result;rounded(acknowledge,10)
 acknowledge.Activated:Connect(function() resultDismissed=true;result.Visible=false end)
 local toast=text(canvas,"",300,330,360,65,38,C.gold);toast.TextTransparency=1
 local muted=false
@@ -164,9 +167,11 @@ local stockTitle=text(stockCard,"FRONT / BACK",4,4,140,20,11,C.mint)
 icon(stockCard,"KIT_1",7,27,36,30)
 icon(stockCard,"KIT_2",7,62,36,30)
 icon(stockCard,"KIT_3",7,97,36,30)
-local stockNoodles=text(stockCard,"",46,27,94,28,17,C.gold)
-local stockRice=text(stockCard,"",46,62,94,28,17,C.gold)
-local stockTea=text(stockCard,"",46,97,94,28,17,C.gold)
+local stockNoodles=text(stockCard,"",44,27,66,28,15,C.gold)
+local stockRice=text(stockCard,"",44,62,66,28,15,C.gold)
+local stockTea=text(stockCard,"",44,97,66,28,15,C.gold)
+local stockStations={}
+for i=1,3 do local t=text(stockCard,"",108,23+(i-1)*35,38,36,11,C.muted);t.Name="KitStations"..i;t.TextWrapped=true;stockStations[i]=t end
 local currentOrder,currentHeld,currentEvent,currentCooking="","","",""
 local lastTier
 local highlight=Instance.new("Highlight");highlight.Name="NextAction";highlight.Enabled=false;highlight.FillColor=C.gold;highlight.FillTransparency=.85;highlight.OutlineColor=C.gold;highlight.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;highlight.Parent=workspace
@@ -174,7 +179,12 @@ local targets={BLACKOUT="FuseBox",WHISPER="Radio",SHADOW="Ward"};for _,recipe in
 local eventIcons={BLACKOUT="FUSE",WHISPER="RADIO",SHADOW="WARD"}
 local eventLabels={BLACKOUT="RESTORE POWER",WHISPER="SILENCE RADIO",SHADOW="BANISH SHADOW"}
 local target,nearPrompt
-for _,p in ipairs(shop and shop:GetDescendants() or {}) do if p:IsA("ProximityPrompt") then p.Style=(p.Name=="Toggle" or p.Name=="TakeStock") and Enum.ProximityPromptStyle.Default or Enum.ProximityPromptStyle.Custom end end
+local function configurePrompt(p)
+ if not p:IsA("ProximityPrompt") then return end
+ local native={Toggle=true,TakeStock=true,UpgradePrompt=true,CrewJoinPrompt=true}
+ p.Style=native[p.Name] and Enum.ProximityPromptStyle.Default or Enum.ProximityPromptStyle.Custom
+end
+for _,p in ipairs(shop and shop:GetDescendants() or {}) do configurePrompt(p) end
 local foodTheme=""
 local menuPalette=StyleCatalog.Menu("")
 local foodIndex={};for _,recipe in Recipes.All do foodIndex[recipe.Id]=recipe.Slot end
@@ -203,6 +213,7 @@ local function update()
  local phase=state:GetAttribute("Phase")
  if phase~="Won" and phase~="Lost" then resultDismissed=false end
  local supply=state:GetAttribute("SupplyFood") or ""
+ local supplyRecipe=state:GetAttribute("SupplyRecipe") or ""
  local supplyMode=state:GetAttribute("SupplyMode") or ""
  stockCard.Visible=shop~=nil
  stockNoodles.Text=tostring(state:GetAttribute("FrontNoodles") or 0).." / "..tostring(state:GetAttribute("BackNoodles") or 0)
@@ -211,6 +222,9 @@ local function update()
  stockNoodles.TextColor3=(state:GetAttribute("FrontNoodles") or 0)==0 and C.red or menuColor(menuPalette.Accent)
  stockRice.TextColor3=(state:GetAttribute("FrontRice") or 0)==0 and C.red or C.gold
  stockTea.TextColor3=(state:GetAttribute("FrontTea") or 0)==0 and C.red or C.gold
+ local letters={{},{},{}}
+ if shop then for index,id in Recipes.MenuForModel(shop,shop:GetAttribute("AppliedStyleTheme") or "") do local slot=Recipes.Slot(id);if letters[slot] then table.insert(letters[slot],string.char(64+index)) end end end
+ for i,t in stockStations do t.Text=table.concat(letters[i]," ") end
 
  local o,h,e,c=state:GetAttribute("Order") or "",state:GetAttribute("Held") or "",state:GetAttribute("Event") or "",state:GetAttribute("Cooking") or ""
  local kind=state:GetAttribute("CustomerKind") or "Guest"
@@ -243,7 +257,10 @@ local function update()
  local tier=(state:GetAttribute("RestaurantTier") or 1)
  if lastTier and tier>lastTier and shop then play("LevelUp") end
  lastTier=tier
- if supply~="" then changeHeld("KIT_"..(Recipes.Slot(supply) or 1));heldLabel.Text="CRATE ×"..tostring(state:GetAttribute("SupplyQuantity") or 0)
+ if supply~="" then
+  changeHeld(Recipes.Get(supplyRecipe) and supplyRecipe or "KIT_"..(Recipes.Slot(supply) or 1))
+  heldDish.Text=supplyMode=="Delivery" and "Mall supplies" or foodName(supplyRecipe)
+  heldLabel.Text=supplyMode=="Delivery" and ("CRATES ×"..tostring(state:GetAttribute("SupplyCrates") or 1)) or ("INGREDIENTS ×"..tostring(state:GetAttribute("SupplyQuantity") or 0))
  else changeHeld(h);heldLabel.Text=h~="" and "READY" or "—" end
  stats.Visible=shop~=nil
  orderCard.Visible=phase=="Playing";heldCard.Visible=phase=="Playing" or supply~=""
@@ -264,6 +281,13 @@ local function update()
  eventbar.Size=UDim2.fromScale(state:GetAttribute("EventLeft") or 1,1)
  result.Visible=(phase=="Won" or phase=="Lost") and not resultDismissed;resultTitle.Text=phase=="Won" and "SHIFT COMPLETE ☀" or "SHIFT FAILED"
  resultCash.Text="$"..tostring(state:GetAttribute("Cash") or 0).."  •  "..tostring(state:GetAttribute("Served") or 0).." served"
+ local level=state:GetAttribute("RestaurantTier") or 1
+ local left=math.max(0,(state:GetAttribute("NextRankAt") or 0)-(state:GetAttribute("CareerServed") or 0))
+ if left>0 then
+  local unlock
+  if level<5 then for _,id in Recipes.Theme(shop and shop:GetAttribute("AppliedStyleTheme") or "") do local r=Recipes.Get(id);if r and r.UnlockLevel==level+1 then unlock=r.Name;break end end end
+  resultGoal.Text=left.." more order"..(left==1 and "" or "s").." to "..(level<5 and ("Lv."..(level+1)) or "the next ★")..(unlock and (" • unlocks "..unlock) or "")
+ else resultGoal.Text="" end
  local key,label
  local courierShop=(player:GetAttribute("CourierShop") or 0)>0 and shops:FindFirstChild("Shop"..player:GetAttribute("CourierShop"))
  if not shop and courierShop then
@@ -272,10 +296,10 @@ local function update()
   local bins={NOODLES="StockNoodles",["FRIED RICE"]="StockRice",["THAI TEA"]="StockTea"}
   local slots={NOODLES=1,["FRIED RICE"]=2,["THAI TEA"]=3}
   target=courierShop:FindFirstChild(bins[food] or "");key="KIT_"..(slots[food] or 1);label="COURIER DELIVERY"
- elseif not shop then target=nil;key="";label="CHOOSE A CREW"
+ elseif not shop then target=nil;key="";label=thai and "เลือกทางต่อไป" or "CHOOSE YOUR NEXT STEP"
  elseif supply~="" then
   local bins={};for _,recipe in Recipes.All do bins[recipe.Id]=({"StockNoodles","StockRice","StockTea"})[recipe.Slot] end
-  target=shop[supplyMode=="Delivery" and bins[supply] or targets[supply]];key=supply;label=supplyMode=="Delivery" and "STORE DELIVERY" or "REFILL STATION"
+  target=shop[supplyMode=="Delivery" and bins[supply] or targets[supplyRecipe] or targets[supply]];key=Recipes.Get(supplyRecipe) and supplyRecipe or "KIT_"..(Recipes.Slot(supply) or 1);label=supplyMode=="Delivery" and "STORE DELIVERY" or "REFILL STATION"
  elseif phase=="Closed" then
   if state:GetAttribute("CloseReason")=="OUT OF STOCK" then
    local stops=workspace.MidnightCity:FindFirstChild("BusStops")
@@ -285,14 +309,18 @@ local function update()
  elseif e~="" then target=shop[targets[e]];key=eventIcons[e];label=eventLabels[e]
  elseif c~="" then target=nil;key=c;label="COOKING…"
  elseif (state:GetAttribute("CustomerStage") or "")~="Ordering" then target=nil;key="";label="NEXT CUSTOMER"
- elseif state:GetAttribute("OrderUnavailable") then target=shop.Serve;key=o;label="MENU UNAVAILABLE"
+ elseif state:GetAttribute("OrderUnavailable") then
+  -- Prefer the backroom refill while that kit still has stock; only an empty kit asks the customer to change.
+  local slot=Recipes.Slot(o) or 1
+  if (state:GetAttribute("Back"..({"Noodles","Rice","Tea"})[slot]) or 0)>0 then target=shop[({"StockNoodles","StockRice","StockTea"})[slot]];key=o;label="REFILL FROM BACKROOM"
+  else target=shop.Serve;key=o;label="MENU UNAVAILABLE" end
  elseif h~="" then target=shop.Serve;key=h;label="SERVE"
  elseif (state:GetAttribute("Prepared") or "")~="" then key=state:GetAttribute("Prepared");target=shop[targets[key]];label="PICK UP MEAL"
  else
   local stockKeys={};for _,recipe in Recipes.All do stockKeys[recipe.Id]=({"Noodles","Rice","Tea"})[recipe.Slot] end
-  local bins={NOODLES="StockNoodles",["FRIED RICE"]="StockRice",["THAI TEA"]="StockTea"}
+  local bins={"StockNoodles","StockRice","StockTea"}
   if (state:GetAttribute("Front"..(stockKeys[o] or "Noodles")) or 0)<=0 then
-   target=shop[bins[o] or "StockNoodles"];key=o;label="GET INGREDIENTS"
+   target=shop[bins[Recipes.Slot(o) or 1]];key=o;label="GET INGREDIENTS"
   else target=shop[targets[o] or "NoodleStation"];key=o;label="COOK" end
  end
  changeTask(key);taskLabel.Text=label
@@ -310,7 +338,7 @@ player:GetAttributeChangedSignal("CourierShop"):Connect(update)
 local menuThemeConnection
 local function bindMenuTheme()
  if menuThemeConnection then menuThemeConnection:Disconnect();menuThemeConnection=nil end
- if shop then menuThemeConnection=shop:GetAttributeChangedSignal("AppliedStyleTheme"):Connect(update) end
+ if shop then menuThemeConnection=shop.AttributeChanged:Connect(function(name) if name=="AppliedStyleTheme" or name=="MenuLevel" or name=="SignatureMenu" then update() end end) end
  foodTheme="";orderCard:SetAttribute("MenuStyled",false);update()
 end
 bindMenuTheme()
@@ -343,6 +371,14 @@ Run.RenderStepped:Connect(function(dt)
   orderCard.Position=UDim2.fromOffset(leftEdge,118);stockCard.Position=UDim2.fromOffset(leftEdge,325)
   heldCard.Position=UDim2.fromOffset(960-leftEdge-148*sideCardFactor,118)
  end
+ -- Landscape phones: enlarge the task card (~.71 effective scale) and keep it right of the left-40% thumbstick
+ -- zone, bottom edge unchanged; the KITCHEN button sits above the jump button so this row stays free.
+ if game.UserInputService.TouchEnabled and not portrait then
+  local f=math.clamp(.71/sideScale,1,1.35);taskCard.MobileLayoutScale.Scale=f
+  -- +24 px past the zone leaves a visible gap after the first-shift guide, which ends near the zone edge.
+  local centerX=math.max(viewport.X/2,viewport.X*.4+24+180*f*sideScale)
+  taskCard.Position=UDim2.fromOffset((centerX-viewport.X/2)/sideScale+480-180*f,618-98*f)
+ end
  local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
  pulse+=dt
 
@@ -350,21 +386,22 @@ Run.RenderStepped:Connect(function(dt)
   local distance=(root.Position-target.Position).Magnitude;nearPrompt=distance<=6 and target:FindFirstChildOfClass("ProximityPrompt") or nil
   local destinations={
  StartShift="Go to the golden bell",
- NoodleStation="Go to the prep station",
- RiceStation="Go to the kitchen station",
- TeaStation="Go to the drinks station",
+ NoodleStation="Go to STATION A / PREP",
+ RiceStation="Go to STATION B / KITCHEN",
+ TeaStation="Go to STATION C / DRINKS",
+ CookingStationD="Go to STATION D",CookingStationE="Go to STATION E",CookingStationF="Go to STATION F",
  Serve="Go to the serving counter",
  FuseBox="Go to the fuse box",
  Radio="Go to the radio",
- Ward="Go to the cyan ward",
- OpenClose="F to reopen / Kitchen → Supplies",
- StockNoodles="Go to the backroom bin",StockRice="Go to the backroom bin",StockTea="Go to the backroom bin"
+ Ward="Go behind the radio",
+ OpenClose="Go to the OPEN / CLOSED sign",
+ StockNoodles="Go to shelf A / PREP",StockRice="Go to shelf B / KITCHEN",StockTea="Go to shelf C / DRINKS"
 }
-keyLabel.Text=nearPrompt and ("Hold "..nearPrompt.KeyboardKeyCode.Name.." / Tap") or (target.Parent and target.Parent.Name=="BusStops" and "Go to the BUS stop / MANAGE → Travel" or destinations[target.Name] or "Move closer")
+keyLabel.Text=nearPrompt and ("Hold "..nearPrompt.KeyboardKeyCode.Name.." / Tap") or (target.Parent and target.Parent.Name=="BusStops" and "Go to the BUS stop, then buy supplies at the MALL" or destinations[target.Name] or "Move closer")
 
  else
   nearPrompt=nil
-  if not shop then keyLabel.Text="Tap here / MANAGE → Co-op"
+  if not shop then keyLabel.Text=thai and "แตะเพื่อเปิดร้านของตัวเอง หรือไปที่ป้ายรับสมัครสีเขียว" or "Tap for options, or find a green NOW HIRING sign"
   elseif state:GetAttribute("Phase")=="Playing" then
    keyLabel.Text=state:GetAttribute("CustomerStage")=="Leaving" and "Customer is leaving" or "Customer is walking over"
   else keyLabel.Text="" end
@@ -374,13 +411,13 @@ keyLabel.Text=nearPrompt and ("Hold "..nearPrompt.KeyboardKeyCode.Name.." / Tap"
  cookbar.Size=UDim2.fromScale(math.clamp(1-(cookEnd-workspace:GetServerTimeNow())/math.max(.1,state:GetAttribute("CookDuration") or 3),0,1),1)
  for _,a in ipairs(shop and shop:GetChildren() or {}) do if a.Name=="Cooktop" then
   local emitter=a:FindFirstChild("Steam",true)
-  if emitter then local station=shop and shop:FindFirstChild(Recipes.Station(currentCooking) or "");local x=station and station.Position.X;emitter.Rate=x and math.abs(a.Position.X-x)<1 and 15 or 0 end
+  if emitter then local station=shop and shop:FindFirstChild(Recipes.Station(currentCooking) or "");emitter.Rate=station and a:GetAttribute("CookingStation")==station.Name and 15 or 0 end
  end end
 end)
 local activating=false
 action.Activated:Connect(function()
  if not shop and not nearPrompt then
-  local event=player.PlayerGui:FindFirstChild("OpenMidnightManagement");if event then event:Fire("Co-op") end
+  local event=player.PlayerGui:FindFirstChild("OpenMidnightManagement");if event then event:Fire("Overview") end
   return
  end
  if activating or not nearPrompt then return end
@@ -391,7 +428,7 @@ player:GetAttributeChangedSignal("ShopId"):Connect(function()
  resultDismissed=false
  shop=selectedShop()
  bindMenuTheme()
- for _,p in ipairs(shop and shop:GetDescendants() or {}) do if p:IsA("ProximityPrompt") then p.Style=Enum.ProximityPromptStyle.Custom end end
+ for _,p in ipairs(shop and shop:GetDescendants() or {}) do configurePrompt(p) end
  update()
 end)
 if shop then
