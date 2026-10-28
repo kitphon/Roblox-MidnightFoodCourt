@@ -32,14 +32,24 @@ local function walk(m,point)
  local began=os.clock()
  local legL,legR=m:FindFirstChild("LeftLeg"),m:FindFirstChild("RightLeg")
  local armL,armR=m:FindFirstChild("LeftArm"),m:FindFirstChild("RightArm")
+ local handL,handR=m:FindFirstChild("LeftHand"),m:FindFirstChild("RightHand")
+ local shoeL,shoeR=m:FindFirstChild("LeftShoe"),m:FindFirstChild("RightShoe")
  local connection=value.Changed:Connect(function(cf)
   if not m.Parent then return end
   m:PivotTo(cf)
   local swing=math.sin((os.clock()-began)*12)*.28
-  if legL then legL.CFrame=cf*CFrame.new(-.45,.75,0)*CFrame.Angles(swing,0,0) end
-  if legR then legR.CFrame=cf*CFrame.new(.45,.75,0)*CFrame.Angles(-swing,0,0) end
-  if armL then armL.CFrame=cf*CFrame.new(-1.05,2.45,0)*CFrame.Angles(-swing,0,0) end
-  if armR then armR.CFrame=cf*CFrame.new(1.05,2.45,0)*CFrame.Angles(swing,0,0) end
+  local legLCf=cf*CFrame.new(-.45,.75,0)*CFrame.Angles(swing,0,0)
+  local legRCf=cf*CFrame.new(.45,.75,0)*CFrame.Angles(-swing,0,0)
+  local armLCf=cf*CFrame.new(-1.05,2.62,0)*CFrame.Angles(-swing,0,0)
+  local armRCf=cf*CFrame.new(1.05,2.62,0)*CFrame.Angles(swing,0,0)
+  if legL then legL.CFrame=legLCf end
+  if legR then legR.CFrame=legRCf end
+  if shoeL then shoeL.CFrame=legLCf*CFrame.new(0,-.72,-.12) end
+  if shoeR then shoeR.CFrame=legRCf*CFrame.new(0,-.72,-.12) end
+  if armL then armL.CFrame=armLCf end
+  if armR then armR.CFrame=armRCf end
+  if handL then handL.CFrame=armLCf*CFrame.new(0,-.72,0) end
+  if handR then handR.CFrame=armRCf*CFrame.new(0,-.72,0) end
  end)
  local speed=math.max(1,Catalog.Get("CustomerWalkSpeed",7))*(m:GetAttribute("VisitSpeed") or 1)
  local tween=Tween:Create(value,TweenInfo.new(delta.Magnitude/speed,Enum.EasingStyle.Linear),{Value=CFrame.lookAt(point,point+delta.Unit)})
@@ -52,8 +62,12 @@ local function walk(m,point)
  local cf=m:GetPivot()
  if legL then legL.CFrame=cf*CFrame.new(-.45,.75,0) end
  if legR then legR.CFrame=cf*CFrame.new(.45,.75,0) end
- if armL then armL.CFrame=cf*CFrame.new(-1.05,2.45,0) end
- if armR then armR.CFrame=cf*CFrame.new(1.05,2.45,0) end
+ if shoeL then shoeL.CFrame=cf*CFrame.new(-.45,.03,-.12) end
+ if shoeR then shoeR.CFrame=cf*CFrame.new(.45,.03,-.12) end
+ if armL then armL.CFrame=cf*CFrame.new(-1.05,2.62,0) end
+ if armR then armR.CFrame=cf*CFrame.new(1.05,2.62,0) end
+ if handL then handL.CFrame=cf*CFrame.new(-1.05,1.9,0) end
+ if handR then handR.CFrame=cf*CFrame.new(1.05,1.9,0) end
  return true
 end
 local function icon(m,food)
@@ -116,7 +130,7 @@ function Flow.Spawn(shop,food,onArrive)
  m:SetAttribute("CustomerName",shop.CustomerName)
  local facing=CFrame.lookAt(start,stand.Position+outward*4)
  local function part(n,size,pos,col,shape)
-  local a=Instance.new("Part");a.Name=n;a.Size=size;a.CFrame=facing*CFrame.new(pos);a.Color=col;a.Anchored=true;a.CanCollide=false;a.CanQuery=false;if shape then a.Shape=shape end;a.Parent=m;return a
+  local a=Instance.new("Part");a.Name=n;a.Size=size;a.CFrame=facing*CFrame.new(pos);a.Color=col;a.Anchored=true;a.CanCollide=false;a.CanTouch=false;a.CanQuery=false;a.TopSurface=Enum.SurfaceType.Smooth;a.BottomSurface=Enum.SurfaceType.Smooth;if shape then a.Shape=shape end;a.Parent=m;return a
  end
  local root=part("Root",Vector3.new(.02,.02,.02),Vector3.zero,Color3.new());root.Transparency=1;m.PrimaryPart=root
  local shirt=Color3.fromRGB(unpack(shirts[(serial-1)%#shirts+1]))
@@ -124,15 +138,51 @@ function Flow.Spawn(shop,food,onArrive)
  if shop.CustomerKind=="Regular" then shirt=Color3.fromRGB(57,133,119);skin=Color3.fromRGB(219,178,141) end
  m:SetAttribute("VisitSpeed",shop.RushUntil and shop.RushUntil>workspace:GetServerTimeNow() and 1.3 or 1)
  local dark=Color3.fromRGB(30,36,45)
+ local hair=serial%2==0 and Color3.fromRGB(77,52,35) or dark
+ local accent=Color3.fromRGB(unpack(shirts[(serial+2)%#shirts+1]))
+ local shoe=serial%3==0 and Color3.fromRGB(132,92,64) or Color3.fromRGB(23,28,36)
  part("LeftLeg",Vector3.new(.6,1.5,.7),Vector3.new(-.45,.75,0),dark)
  part("RightLeg",Vector3.new(.6,1.5,.7),Vector3.new(.45,.75,0),dark)
+ part("LeftShoe",Vector3.new(.68,.32,.95),Vector3.new(-.45,.03,-.12),shoe)
+ part("RightShoe",Vector3.new(.68,.32,.95),Vector3.new(.45,.03,-.12),shoe)
  part("Body",Vector3.new(1.8,1.9,1),Vector3.new(0,2.45,0),shirt)
- part("LeftArm",Vector3.new(.4,1.7,.5),Vector3.new(-1.05,2.45,0),shirt)
- part("RightArm",Vector3.new(.4,1.7,.5),Vector3.new(1.05,2.45,0),shirt)
+ part("LeftArm",Vector3.new(.46,1.2,.56),Vector3.new(-1.05,2.62,0),shirt)
+ part("RightArm",Vector3.new(.46,1.2,.56),Vector3.new(1.05,2.62,0),shirt)
+ part("LeftHand",Vector3.new(.48,.38,.58),Vector3.new(-1.05,1.9,0),skin,Enum.PartType.Ball)
+ part("RightHand",Vector3.new(.48,.38,.58),Vector3.new(1.05,1.9,0),skin,Enum.PartType.Ball)
  part("Head",Vector3.new(1.4,1.4,1.4),Vector3.new(0,4.1,0),skin,Enum.PartType.Ball)
- part("Hair",Vector3.new(1.42,.4,1.4),Vector3.new(0,4.65,.03),serial%2==0 and Color3.fromRGB(77,52,35) or dark)
- for _,x in ipairs({-.28,.28}) do local e=part("Eye",Vector3.new(.12,.12,.06),Vector3.new(x,4.22,-.67),dark);e.Material=Enum.Material.Neon end
- if serial%3==0 and shop.CustomerKind~="Regular" then part("Cap",Vector3.new(1.55,.2,1.7),Vector3.new(0,4.92,-.1),shirt) end
+ part("Hair",Vector3.new(1.44,.4,1.42),Vector3.new(0,4.65,.03),hair)
+ local hairStyle=serial%4
+ if hairStyle==0 then
+  part("HairBack",Vector3.new(1.4,1.05,.32),Vector3.new(0,4.28,.58),hair)
+  part("HairSide",Vector3.new(.25,.75,.75),Vector3.new(-.67,4.32,.18),hair)
+ elseif hairStyle==1 then
+  part("HairSweep",Vector3.new(.75,.25,1.43),Vector3.new(-.32,4.73,-.02),hair)
+ elseif hairStyle==2 then
+  part("HairSide",Vector3.new(.26,.82,.8),Vector3.new(.66,4.3,.18),hair)
+  part("HairSide",Vector3.new(.26,.82,.8),Vector3.new(-.66,4.3,.18),hair)
+ else
+  part("HairBun",Vector3.new(.62,.62,.62),Vector3.new(0,4.95,.32),hair,Enum.PartType.Ball)
+ end
+ for _,x in ipairs({-.28,.28}) do
+  local e=part("Eye",Vector3.new(.14,.17,.06),Vector3.new(x,4.22,-.67),dark);e.Material=Enum.Material.Neon
+  local shine=part("EyeShine",Vector3.new(.045,.055,.025),Vector3.new(x-.025,4.26,-.715),Color3.fromRGB(235,248,245));shine.Material=Enum.Material.Neon
+  part("Brow",Vector3.new(.3,.055,.055),Vector3.new(x,4.43,-.66),hair)
+ end
+ part("Nose",Vector3.new(.1,.13,.07),Vector3.new(0,4.07,-.7),skin:Lerp(Color3.fromRGB(112,72,66),.18),Enum.PartType.Ball)
+ part("Smile",Vector3.new(.34,.055,.055),Vector3.new(0,3.89,-.68),skin:Lerp(Color3.fromRGB(92,40,53),.7))
+ local blush=skin:Lerp(Color3.fromRGB(235,102,118),.38)
+ part("LeftBlush",Vector3.new(.18,.07,.035),Vector3.new(-.43,4.01,-.66),blush)
+ part("RightBlush",Vector3.new(.18,.07,.035),Vector3.new(.43,4.01,-.66),blush)
+ part("Collar",Vector3.new(1.1,.16,1.04),Vector3.new(0,3.34,0),accent)
+ if serial%3==0 and shop.CustomerKind~="Regular" then
+  part("Cap",Vector3.new(1.55,.2,1.7),Vector3.new(0,4.92,-.1),shirt)
+  part("CapBrim",Vector3.new(.9,.09,.4),Vector3.new(0,4.84,-.78),shirt)
+ elseif serial%3==1 then
+  part("ChestStripe",Vector3.new(1.82,.22,1.02),Vector3.new(0,2.55,0),accent)
+ else
+  part("Pocket",Vector3.new(.42,.38,.07),Vector3.new(.48,2.55,-.53),accent)
+ end
  if shop.CustomerKind=="Regular" then
   m.Hair.Color=Color3.fromRGB(70,45,32)
   m:SetAttribute("RegularId","riley")

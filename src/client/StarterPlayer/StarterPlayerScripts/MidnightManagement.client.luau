@@ -394,19 +394,10 @@ local function renderShopSaves()
      confirmSaveAction="";confirmSaveUntil=0;command(action)
     else confirmSaveAction=action;confirmSaveUntil=os.clock()+12;render() end
    end
-   local access=tile("Shop Save Slot",save.Owned and "Owned forever. Save and reuse one shop design." or "One-time unlock. Save your favorite design and load it on your next visit.","Save",C.gold)
-   local testing=save.TestEnabled==true
-   local buy=button(access,save.Owned and (testing and "TEST UNLOCKED" or "PERMANENTLY OWNED") or testing and "Test unlock (free)" or save.Configured and "Buy Save Slot" or "Coming soon",12,130,234,34,function() command(testing and "SaveTestUnlock" or "SaveBuyPass") end)
+   local access=tile("Shop Save Slot",save.Owned and "Owned forever. Your shop, funds, Coins and level are kept between visits." or "Without it, every visit starts a fresh shop. Unlock once to keep your shop, funds, Coins and level.","Save",C.gold)
+   local buy=button(access,save.Owned and "PERMANENTLY OWNED" or "Unlock • "..save.GemPrice.." Gems",12,130,234,34,function() command("SaveBuyGems") end)
    buy.Name="BuySaveSlot"
-   if save.Owned then disabled(buy,testing and "TEST UNLOCKED" or "PERMANENTLY OWNED") elseif not save.Configured and not testing then disabled(buy,"Coming soon") elseif not testing then
-    task.spawn(function()
-     local ok,info=pcall(function() return game:GetService("MarketplaceService"):GetProductInfo(save.PassId,Enum.InfoType.GamePass) end)
-     if buy.Parent then
-      if ok and info.IsForSale and type(info.PriceInRobux)=="number" then buy.Text="Unlock • "..info.PriceInRobux.." Robux"
-      else disabled(buy,"Price unavailable") end
-     end
-    end)
-   end
+   if save.Owned then disabled(buy,"PERMANENTLY OWNED") elseif save.Gems<save.GemPrice then disabled(buy,"Need "..save.GemPrice.." Gems") end
    local date=save.HasSave and os.date("!%d %b %Y • %H:%M UTC",save.SavedAt) or "Empty slot"
    local slot=tile(save.HasSave and save.ThemeName.." design" or "Your design slot",save.HasSave and date.."\nTheme, decorations and equipped styles." or "Save your current theme, decorations and equipped styles here.","Save",C.mint)
    local saveButton=button(slot,confirmSaveAction=="SaveDesign" and os.clock()<confirmSaveUntil and "Confirm overwrite" or save.HasSave and "Overwrite saved design" or "Save current design",12,130,234,34,function()
@@ -421,7 +412,7 @@ local function renderShopSaves()
    local resume=tile("Next visit",save.AutoResume and "Your saved design loads automatically when you return." or "Return with your latest design. Your saved slot stays available.","Home",C.gold)
    local auto=button(resume,save.AutoResume and "Auto-load: ON" or "Auto-load: OFF",12,130,234,34,function() command("SaveAutoResume") end);auto.Name="ToggleSaveAutoResume"
    if not save.Owned or not save.HasSave or not snapshot.Owner then disabled(auto,"Save your design first") end
-   tile("Progress stays safe","Funds, stock, upgrades, employees and purchased items save automatically for everyone. Loading never duplicates currency or supplies.","✓",C.mint)
+   tile(save.Owned and "Progress stays safe" or "Fresh start each visit",save.Owned and "Funds, Coins, stock, upgrades, employees and level save automatically. Loading never duplicates currency or supplies." or "Gems, purchased items and decorations always stay. Shop funds, Coins, stock, upgrades, employees and level reset when you leave.","✓",C.mint)
    if save.TestEnabled then
     local test=tile("Studio test","No Robux charged. Saves last only until Stop; cloud saving needs a published game.","Save",C.gold)
     local testButton=button(test,"Test unlock (Studio)",12,130,234,34,function() command("SaveTestUnlock") end);testButton.Name="TestUnlockSaveSlot"
@@ -749,13 +740,16 @@ resize=function()
 end
 workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize);resize()
 openButton.Activated:Connect(toggle)
+local function escapeWindows()
+ if mallPanel.Visible then closeMall() elseif upgradePanel.Visible then closeUpgrade() elseif panel.Visible then toggle() end
+end
 UIS.InputBegan:Connect(function(input,processed)
+ -- Roblox marks Escape as processed because it also opens the system menu.
+ if input.KeyCode==Enum.KeyCode.Escape then escapeWindows();return end
  if processed then return end
- if input.KeyCode==Enum.KeyCode.M then toggle()
- elseif input.KeyCode==Enum.KeyCode.Escape then
-  if mallPanel.Visible then closeMall() elseif upgradePanel.Visible then closeUpgrade() elseif panel.Visible then toggle() end
- end
+ if input.KeyCode==Enum.KeyCode.M then toggle() end
 end)
+game:GetService("GuiService").MenuOpened:Connect(function() closeUpgrade();closeMall() end)
 network.Notice.OnClientEvent:Connect(function(text)
  if panel.Visible then message.Text=text end
  if upgradePanel.Visible then upgradeMessage.Text=text end
@@ -795,5 +789,19 @@ task.spawn(function()
   if (panel.Visible or upgradePanel.Visible or mallPanel.Visible) and not busy then refresh() end
   -- Walking away from the supply counter closes the mall window.
   if mallPanel.Visible and snapshot and not busy and not (snapshot.Supplies and snapshot.Supplies.NearMall) and not (snapshot.Courier and snapshot.Courier.NearMall) then closeMall() end
+ end
+end)
+-- Walking away from the backroom Upgrade Desk closes its window.
+local UpgradeDeskRange=14
+task.spawn(function()
+ while gui.Parent do
+  task.wait(.3)
+  if upgradePanel.Visible then
+   local shops=workspace:FindFirstChild("MidnightShops")
+   local shop=shops and shops:FindFirstChild("Shop"..tostring(player:GetAttribute("ShopId")))
+   local desk=shop and shop:FindFirstChild("WorldActions") and shop.WorldActions:FindFirstChild("Upgrade")
+   local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+   if desk and root and (desk:GetPivot().Position-root.Position).Magnitude>UpgradeDeskRange then closeUpgrade() end
+  end
  end
 end)

@@ -19,9 +19,9 @@ Updated 2026-10-24. “Implemented” means present in Studio source; deployment
 | Food visibility | Server-created held food model visible across clients; new implementation awaiting second-client validation |
 | Workers | NPC chef/waiter/technician; role outfits, paid hiring, automated tasks |
 | Player roles | Chef 20% faster cooking; Waiter +10% serving value; Technician +15 shop funds per repair |
-| Customer flow | Multiple arriving/departing guests; stock-aware orders and alternatives |
+| Customer flow | Multiple arriving/departing guests; stock-aware orders and alternatives. Runtime guests have varied skin/shirt palettes, four hair looks, detailed faces, collars/outfit accents, hands and shoes; hands/shoes follow the walking swing |
 | Special guests | Reviewer bonuses/review reasons/popularity rush, Riley relationship, Dinner Party group behavior |
-| Interruptions | BLACKOUT / WHISPER / SHADOW; separate Shadow behind radio, relocated Ward banishment and slow partial shop-light flicker until resolved; existing Technician can resolve it; city remains nighttime |
+| Interruptions | BLACKOUT / WHISPER / SHADOW; none start during the five-step guide (including the Upgrade Desk step) or in the last EventSeconds+10 (30) seconds of a shift; separate Shadow behind radio, relocated Ward banishment and slow partial shop-light flicker until resolved; existing Technician can resolve it; city remains nighttime |
 | Progression | Five ranks at served totals 0/8/25/60/125; up to 20 Legend Stars, +2% food value per star |
 | Physical progression | Backroom work desk opens an independent owner Upgrade window with funds/deposit and close; M opens separate management; Dining Area has three visible expansion levels with covered seating |
 | Trees and fairy lights | `City.DressTrees` (shop tree rows from ShopService.Start, park trees from City.Start) varies each tree deterministically by position: 0.8–1.2× size and six looks (round, small, pine stack, cluster, pink blossom, autumn orange); every other tree gets bushes, some with flowers; neon fairy lights sag between neighbouring trees in a row. Extras are tagged `TreeRowDecor` so the dining expansion shifts them with the right-hand tree row |
@@ -33,14 +33,14 @@ Updated 2026-10-24. “Implemented” means present in Studio source; deployment
 | Goals/tutorial | Five-step first-shift tutorial and shift team goals |
 | Retention | Three daily quests, weekly rewards, seven-day login streak |
 | Rankings | Weekly and lifetime served leaderboards in Journey; sandbox uses server-local results |
-| City | Ambient citizens and events: rush/bus/rain/quiet night. Citizens have faces (eyes with shine, blush, smile), four hair styles (short, cap, long, bun), shirt sleeves with skin-tone hands, varied skin/hair/pants and shoes. Town buildings are dressed at runtime (`TownDetail`): most windows lit warm/TV-blue with frames and sills, side windows, floor band/plinth, neon roof strip and sign underline, glowing entrance with awning and lamp, rooftop AC/antenna, plus apartment flower boxes/planters, market fruit crates and OPEN 24H sign, clinic neon cross and bench, office planters/wall AC, bus terminal departure board and bench |
+| City | Ambient citizens and events: rush/bus/rain/quiet night. Citizens have faces (eyes with shine, blush, smile), four hair styles (short, cap, long, bun), shirt sleeves with skin-tone hands, varied skin/hair/pants and shoes. Server-authoritative route roots are smoothed locally every rendered frame; arms and legs swing oppositely with body bob, breathing, idle look and a blended walk/idle transition. Town buildings are dressed at runtime (`TownDetail`): most windows lit warm/TV-blue with frames and sills, side windows, floor band/plinth, neon roof strip and sign underline, glowing entrance with awning and lamp, rooftop AC/antenna, plus apartment flower boxes/planters, market fruit crates and OPEN 24H sign, clinic neon cross and bench, office planters/wall AC, bus terminal departure board and bench |
 | Visitors | Courier delivery jobs, stock support for kitchens and Coin reward |
 | Cosmetics | Themes, uniforms, staff/team styles, effects, emotes, decor and packs |
 | Photo mode | Flexible camera and hidden NPC speech; world photo points |
 | Economy | Personal Coins, premium Gems, owner shop Bank |
 | Monetization | 11 Game Passes, three repeatable Gems products; platform IDs configured |
-| Save | Existing automatic progression persistence; optional 79-Robux permanent design Save/Load slot |
-| Touch layout | On touch devices the KITCHEN button drops the [M] hint and sits bottom-right beside the jump button, leaving the left thumbstick zone clear; the first-shift guide moves beside the FRONT / BACK card when the screen is too short |
+| Save | Without a Save Slot each visit starts a fresh shop (Coins, Bank, upgrades, employees, stock and level reset; Gems, purchases and decorations stay). Save Slot unlocks permanently for 150 Gems and keeps shop progress automatically, plus one design Save/Load slot. Earlier 79-Robux pass buyers keep access |
+| Touch layout | On touch devices shop prompts use Roblox's tappable Default style (bell, stations, counter); the KITCHEN button drops the [M] hint and sits bottom-right beside the jump button, leaving the left thumbstick zone clear; the first-shift guide moves beside the FRONT / BACK card when the screen is too short |
 | Input/UI | Simplified management navigation, world-first Upgrade/Crew prompts, English fallback plus Thai localization for main management/world actions, keyboard/touch/gamepad prompts where implemented, Shift camera lock, distinct equip states |
 
 ## Current navigation
@@ -50,7 +50,7 @@ Updated 2026-10-24. “Implemented” means present in Studio source; deployment
 - Station A/B/C signs are mounted on the front of the station bases, matching shelf colors/letters without floating above cooking surfaces.
 - Hiring/Upgrade labels are visible only when not blocked by geometry. Office noticeboard is mounted in front of its wall; rear lawn starts at the extended pavement edge without overlapping surfaces.
 - Stock room: 32x11 ingredient pantry with lower interactive bins, shorter racks, ingredient sacks, open vegetable crates, tea jars and a small receiving surface; Office: furnished computer workstation with a usable chair, filing cabinet and noticeboard. Interact at the desk to upgrade.
-- Backroom: separate front Stock room and rear Office in a 32x25 footprint; six-stud connecting doorway, with Upgrade Desk in the Office. Stock bins, count labels and sibling box visuals move together.
+- Backroom: separate front Stock room and rear Office in a 32x25 footprint; six-stud connecting doorway, with Upgrade Desk in the Office. The Upgrade window closes on Escape, when the Roblox menu opens, or when the player walks more than 14 studs from the desk. Stock bins, count labels and sibling box visuals move together.
 - Ingredient racks sit against the INGREDIENTS wall with .15-stud clearance, uniformly reduced by 5% including their stock bins and ingredient visuals.
 - Shelf labels sit on top of each rack (above the top deck, not covering the stock) under a raised INGREDIENTS header. They list their currently unlocked dishes, with matching color/letter station labels (A/PREP, B/KITCHEN, C/DRINKS). Theme changes, menu unlocks and signature substitution update the mapping automatically; pickup notices/HUD directions use the same letters.
 - Tutorial and unlock notices use the current Upgrade Desk, Save / Load design and More options > Travel routes; the shop return button is Back to Kitchen.
@@ -107,6 +107,7 @@ Versionable source and assets now live alongside this documentation. Rojo 7.7.1 
 - Station gear follows full theme recipes (including locked stations and signature rice) and updates when theme changes: pot, wok, tea bar, oven, grill, prep board, steamer, rice cooker, coffee machine or blender. Food placement, station prompts and ingredient pools unchanged. Repeated unchanged refreshes retain equipment instances.
 
 ## Storefront collection — 2026-10-27
-- Shop > Decor offers ordinary Plant Corner (350 Coins), Mint Market Sign / Sunset Kitchen Sign (600 Coins each), and special Sakura Rooftop (75 Gems) / Cosmic Rooftop (85 Gems). Coins are personal player currency, not Shop Bank. Existing aquarium/neon/speaker remain Gems; ownership of older items is preserved.
+- Shop > Decor offers ordinary Plant Corner (350 Coins), Noodle Bowl Mascot / Fried Rice Mascot (600 Coins each), and special Sakura Dumpling Mascot (75 Gems) / Cosmic Thai Tea Mascot (85 Gems). Coins are personal player currency, not Shop Bank. Existing aquarium/neon/speaker remain Gems; the four storefront IDs are unchanged so previous ownership is preserved.
 - New Front slot equips one rooftop feature above the owner sign, with free removal/re-equip after purchase. UI shows actual currency, insufficient funds, owned/equipped states and previews. Server chooses price/currency from catalog and mutates profiles atomically; client-supplied prices are not used.
+- Each Front feature combines an English food sign with a large non-colliding rooftop mascot and distinct silhouette: noodle bowl/chopsticks, fried rice/egg, sakura dumpling/blossoms, or glowing Thai tea/orbit. The permanent nighttime storefront lights and owner sign remain visible.
 

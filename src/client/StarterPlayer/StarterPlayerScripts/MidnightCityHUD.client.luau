@@ -182,7 +182,8 @@ local target,nearPrompt
 local function configurePrompt(p)
  if not p:IsA("ProximityPrompt") then return end
  local native={Toggle=true,TakeStock=true,UpgradePrompt=true,CrewJoinPrompt=true}
- p.Style=native[p.Name] and Enum.ProximityPromptStyle.Default or Enum.ProximityPromptStyle.Custom
+ -- Custom prompts draw no tap target, so phones get Roblox's tappable prompt button in the world.
+ p.Style=(native[p.Name] or game.UserInputService.TouchEnabled) and Enum.ProximityPromptStyle.Default or Enum.ProximityPromptStyle.Custom
 end
 for _,p in ipairs(shop and shop:GetDescendants() or {}) do configurePrompt(p) end
 local foodTheme=""
@@ -397,7 +398,7 @@ Run.RenderStepped:Connect(function(dt)
  OpenClose="Go to the OPEN / CLOSED sign",
  StockNoodles="Go to shelf A / PREP",StockRice="Go to shelf B / KITCHEN",StockTea="Go to shelf C / DRINKS"
 }
-keyLabel.Text=nearPrompt and ("Hold "..nearPrompt.KeyboardKeyCode.Name.." / Tap") or (target.Parent and target.Parent.Name=="BusStops" and "Go to the BUS stop, then buy supplies at the MALL" or destinations[target.Name] or "Move closer")
+keyLabel.Text=nearPrompt and (game.UserInputService.TouchEnabled and "Tap here or the button" or "Hold "..nearPrompt.KeyboardKeyCode.Name.." / Tap") or (target.Parent and target.Parent.Name=="BusStops" and "Go to the BUS stop, then buy supplies at the MALL" or destinations[target.Name] or "Move closer")
 
  else
   nearPrompt=nil

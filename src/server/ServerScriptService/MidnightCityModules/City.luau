@@ -58,9 +58,13 @@ local function move(m,point,speed)
  local origin=m:GetPivot().Position;local delta=point-origin
  if delta.Magnitude<.1 then return end
  local cf=CFrame.lookAt(origin,point)
- m:PivotTo(cf)
+ -- Replicate only the invisible route root. MidnightGameplay renders the visible
+ -- body from CitizenRest offsets, avoiding server CFrame updates fighting the
+ -- client's smooth arm/leg pose every frame.
+ local root=m.PrimaryPart;if not root then return end
+ root.CFrame=cf
  local value=Instance.new("CFrameValue");value.Value=cf
- local connection=value.Changed:Connect(function(v) if m.Parent then m:PivotTo(v) end end)
+ local connection=value.Changed:Connect(function(v) if root.Parent then root.CFrame=v end end)
  local tween=Tween:Create(value,TweenInfo.new(delta.Magnitude/(speed or 7),Enum.EasingStyle.Linear),{Value=CFrame.lookAt(point,point+delta.Unit)})
  tween:Play();tween.Completed:Wait();connection:Disconnect();value:Destroy()
 end

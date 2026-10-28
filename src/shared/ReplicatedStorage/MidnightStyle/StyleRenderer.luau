@@ -12,6 +12,10 @@ local function sign(parent,name,text,pos,size,color)
  local l=Instance.new("TextLabel");l.Size=UDim2.fromScale(1,1);l.BackgroundTransparency=1;l.Text=text;l.TextColor3=color;l.Font=Enum.Font.GothamBold;l.TextScaled=true;l.Parent=gui
  return p
 end
+local function mascotFace(parent,center,width,frontZ)
+ for _,x in {-width,width} do part(parent,"MascotEye",Vector3.new(.3,.38,.16),Vector3.new(center.X+x,center.Y+.2,frontZ),Color3.fromRGB(31,39,47)) end
+ part(parent,"MascotSmile",Vector3.new(.7,.14,.16),Vector3.new(center.X,center.Y-.38,frontZ),Color3.fromRGB(31,39,47))
+end
 function R.Paint(model,item)
  if not item or item.Kind~="Theme" then return end
  local wall=col(item.Color);local accent=col(item.Accent)
@@ -161,21 +165,39 @@ function R.Build(model,themeId,slots,parent,name)
   local c=col(decor.Color)
   if slot=="Front" then
    local position=at(0,13.5,-11.3)
-   local title=({front_mint="FRESH & HOT",front_sunset="COZY BITES",front_sakura="SAKURA KITCHEN",front_cosmic="COSMIC BITES"})[id] or "MIDNIGHT KITCHEN"
+   local title=({front_mint="HAPPY NOODLES",front_sunset="SUNNY FRIED RICE",front_sakura="SAKURA DUMPLINGS",front_cosmic="COSMIC THAI TEA"})[id] or "MIDNIGHT KITCHEN"
    local board=sign(folder,"FrontFeatureSign",title,position,Vector2.new(14,2.2),Color3.fromRGB(250,239,212))
    board.Color=c:Lerp(Color3.new(),.45)
    for _,x in {-7.2,7.2} do part(folder,"FrontFeaturePost",Vector3.new(.22,2.5,.22),position+Vector3.new(x,-.4,.15),c,Enum.Material.Metal) end
    for _,y in {-1.2,1.2} do part(folder,"FrontFeatureTrim",Vector3.new(14.6,.15,.2),position+Vector3.new(0,y,-.1),c,id=="front_cosmic" and Enum.Material.Neon or Enum.Material.SmoothPlastic) end
-   if id=="front_sakura" then
+   local mascotCenter=position+Vector3.new(0,2.35,0)
+   if id=="front_mint" then
+    part(folder,"NoodleBowlMascot",Vector3.new(4.2,2,1.2),mascotCenter,c)
+    part(folder,"BowlRim",Vector3.new(4.1,.28,1.35),mascotCenter+Vector3.new(0,.65,0),Color3.fromRGB(214,248,220))
+    for _,x in {-1.05,-.35,.35,1.05} do local noodle=part(folder,"MascotNoodle",Vector3.new(.18,1.1,.18),mascotCenter+Vector3.new(x,1.2,-.05),Color3.fromRGB(255,218,112));noodle.Shape=Enum.PartType.Cylinder end
+    for _,x in {-.55,.55} do local stick=part(folder,"MascotChopstick",Vector3.new(.12,2.8,.12),mascotCenter+Vector3.new(x,1.65,.1),Color3.fromRGB(111,65,40),Enum.Material.Wood);stick.Rotation=Vector3.new(0,0,x*18) end
+    mascotFace(folder,mascotCenter,.58,mascotCenter.Z-.66)
+   elseif id=="front_sunset" then
+    part(folder,"RicePlateMascot",Vector3.new(4.3,1.25,1.4),mascotCenter,c)
+    part(folder,"FriedRice",Vector3.new(3.3,1.55,1.1),mascotCenter+Vector3.new(0,.55,-.05),Color3.fromRGB(245,192,79))
+    part(folder,"MascotEggWhite",Vector3.new(1.7,.75,.35),mascotCenter+Vector3.new(.65,1.15,-.55),Color3.fromRGB(255,248,218))
+    local yolk=part(folder,"MascotEggYolk",Vector3.new(.65,.65,.3),mascotCenter+Vector3.new(.65,1.2,-.75),Color3.fromRGB(255,171,43));yolk.Shape=Enum.PartType.Ball
+    mascotFace(folder,mascotCenter,.58,mascotCenter.Z-.76)
+   elseif id=="front_sakura" then
+    part(folder,"DumplingMascot",Vector3.new(3.8,2.3,1.15),mascotCenter+Vector3.new(0,.25,0),Color3.fromRGB(255,233,210))
+    for _,x in {-1.05,-.52,0,.52,1.05} do local pleat=part(folder,"DumplingPleat",Vector3.new(.22,.75,.24),mascotCenter+Vector3.new(x,.95,-.5),c);pleat.Rotation=Vector3.new(0,0,x*18) end
+    mascotFace(folder,mascotCenter+Vector3.new(0,.15,0),.58,mascotCenter.Z-.64)
     for _,x in {-6,6} do for i=1,5 do local a=i*math.pi*2/5
      local petal=part(folder,"SakuraPetal",Vector3.new(.85,.85,.3),position+Vector3.new(x+math.cos(a)*.55,2+math.sin(a)*.55,0),c);petal.Shape=Enum.PartType.Ball;petal.CastShadow=false
     end local center=part(folder,"BlossomCenter",Vector3.new(.45,.45,.35),position+Vector3.new(x,2,-.1),Color3.fromRGB(255,215,115));center.Shape=Enum.PartType.Ball end
    elseif id=="front_cosmic" then
-    local center=position+Vector3.new(0,3,0)
-    local planet=part(folder,"RoofPlanet",Vector3.new(2.3,2.3,2.3),center,c);planet.Shape=Enum.PartType.Ball
+    part(folder,"ThaiTeaCupMascot",Vector3.new(2.5,3.1,1.25),mascotCenter,Color3.fromRGB(240,151,57))
+    part(folder,"TeaMilkCap",Vector3.new(2.5,.6,1.3),mascotCenter+Vector3.new(0,1.05,0),Color3.fromRGB(255,239,202),Enum.Material.Neon)
+    local straw=part(folder,"CosmicStraw",Vector3.new(.2,2.1,.2),mascotCenter+Vector3.new(.65,1.75,.05),Color3.fromRGB(118,230,239),Enum.Material.Neon);straw.Rotation=Vector3.new(0,0,-12)
+    mascotFace(folder,mascotCenter,.48,mascotCenter.Z-.7)
     for i=1,16 do local a=i*math.pi*2/16;local b=(i+1)*math.pi*2/16
-     local from=center+Vector3.new(math.cos(a)*1.85,math.sin(a)*.4,math.sin(a)*.65)
-     local to=center+Vector3.new(math.cos(b)*1.85,math.sin(b)*.4,math.sin(b)*.65)
+     local from=mascotCenter+Vector3.new(math.cos(a)*2.1,math.sin(a)*.45,math.sin(a)*.72)
+     local to=mascotCenter+Vector3.new(math.cos(b)*2.1,math.sin(b)*.45,math.sin(b)*.72)
      local ring=part(folder,"PlanetRing",Vector3.new(.12,.12,(to-from).Magnitude+.04),(from+to)/2,Color3.fromRGB(130,221,234),Enum.Material.Neon);ring.CFrame=CFrame.lookAt((from+to)/2,to);ring.CastShadow=false
     end
     for _,x in {-5,5} do local star=part(folder,"RoofStar",Vector3.new(.8,.8,.12),position+Vector3.new(x,2.1,0),Color3.fromRGB(248,213,119),Enum.Material.Neon);star.Rotation=Vector3.new(0,0,45) end

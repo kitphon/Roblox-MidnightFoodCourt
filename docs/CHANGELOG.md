@@ -1,5 +1,30 @@
 # Change history
 
+## 2026-10-28 — Mobile bell fix; Save Slot now Gems and gates shop progress
+- MidnightCityHUD: on touch devices every shop prompt uses Roblox's Default (tappable) style instead of the invisible Custom style, so phones get an on-screen button at the golden bell and stations; desktop/gamepad keep the Custom style. The task-card hint reads "Tap here or the button" on touch.
+- ShopSaves: without a Save Slot, each join resets Coins, shop Bank, upgrades, employees, stock, career level/served counts, Riley visits, regular favorites, last review and house-special slot to starter values. Gems, owned items, receipts, equipped looks, placed decorations, the saved design slot, quests/login, tutorial and settings always persist. The reset is skipped if pass ownership cannot be confirmed (lookup failure with no cache).
+- Save Slot is unlocked permanently for 150 Gems (`MonetizationConfig.ShopSaveGems`, new `SaveBuyGems` command, server-validated through Profiles.Mutate, no double charge). Owners keep automatic progress persistence between visits. The Robux pass button is removed; earlier pass buyers still have access.
+- Kitchen > Save / Load design shows the Gems price, "Need N Gems" when short, and a "Fresh start each visit" explanation for players without the slot.
+
+## 2026-10-28 — Teen-playtest fixes: events, upgrade step, Upgrade window
+- ShopService no longer starts interruptions during the whole guide (step 5 Upgrade Desk included; previously only steps 1–4) or in the final EventSeconds+10 seconds of a shift, so a late SHADOW can no longer block serving and void the held dish at shift end.
+- Guide step 5 text now reads "Buy an upgrade at the backroom Upgrade Desk. Your next guest waits for you." (patience was already frozen; events no longer cost hearts there).
+- MidnightManagement: Escape closes the Upgrade/Mall window even though Roblox marks Escape as processed; the Roblox menu opening also closes them; the Upgrade window closes when the player is more than 14 studs from their shop's desk.
+
+## 2026-10-28 — Teen-perspective playtest (no game change)
+- Recorded a heuristic 15–18 playtest in TESTING.md. No source, assets or behavior changed.
+
+## 2026-10-28 — Smooth ambient-citizen walking
+- Ambient citizens now animate locally every rendered frame instead of stepping at 20 Hz. Framerate-independent damping smooths replicated route position, facing, walk speed and walk/idle blending while retaining the existing opposite arm/leg swing, body bob, breathing and idle head look.
+- `City` now replicates only each citizen's invisible authoritative route root; visible anchored body parts are posed from `CitizenRest` on each client, removing the server/client CFrame fight that caused arm and leg snapping. Routes, schedules and permanent nighttime behavior are unchanged.
+
+## 2026-10-28 — More detailed food-court customers
+- Runtime customer models now have skin-tone hands, shoes, collars, outfit accents, four deterministic hair variations and fuller faces (brows, eye shine, nose, smile and skin-adaptive blush). Caps gain a brim and casual outfits vary between a chest stripe and pocket.
+- Hands and shoes follow the existing arm/leg walking swing. All added parts remain anchored runtime decoration with collision, touch and query disabled; customer flow, order logic and special-guest behavior are unchanged.
+
+## 2026-10-28 — Commit d00c8b1
+- Committed all Studio-synced scripts, reviewed MidnightShops asset, docs and `tools/review_scene.py` (hook bypassed with user approval after a passing check). No game changes.
+
 ## 2026-10-27 — Sync audit only
 - No game source or asset changes. Scripts synced (29); full 33-asset scene export 0 differences; SceneDirty still awaiting user acknowledgement. See TESTING.md.
 
@@ -311,3 +336,12 @@ Updated 2026-10-24. Earlier entries summarize the user's handoff and dated QA re
 ## 2026-10-27 — Coins/Gems storefront collection
 - Added four rooftop decorations and Front slot; ordinary signs/plant use Coins, special rooftop designs use Gems. Buy UI and server purchase path support both currencies while retaining ownership and placement validation. Sandbox purchase/placement tests and desktop screenshots passed. No Save/Publish.
 
+
+## 2026-10-28 — Visual review follow-up
+- Reviewed current runtime visuals in single-client desktop Studio for a hypothetical 10–15 audience; no child-user study. Priorities: storefront/building identity, food contrast, mall composition, outdoor landmarks. See TESTING.md for coverage and limitations.
+- Documentation only; no game source/assets/behavior changed. Stop + fresh sync check passed, 29 scripts, pending=[], SceneDirty=false. No Save/Publish.
+
+## 2026-10-28 — Purchasable storefront food mascots
+- Upgraded the four existing Front decorations into food mascots while preserving their IDs and ownership: Noodle Bowl and Fried Rice cost 600 Coins; Sakura Dumpling costs 75 Gems; Cosmic Thai Tea costs 85 Gems.
+- Added large rooftop silhouettes, mascot faces, English food signs and themed accents. Purchase currency/price remains catalog-controlled on the server through Profiles.Mutate; Front placement and free removal/re-equip are unchanged.
+- Studio sandbox purchase, insufficient-funds, placement and visual checks passed. Repository build/source round-trip and final sync checkpoint passed. No persistent scene asset, Save or Publish.

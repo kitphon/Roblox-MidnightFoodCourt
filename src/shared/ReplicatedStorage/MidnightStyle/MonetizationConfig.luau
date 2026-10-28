@@ -2,7 +2,8 @@
 -- Prices are read from Roblox; dashboard is the source of truth.
 return {
  EnableStudioTesting=true,
- ShopSaveSuggestedRobux=79,
+ -- Save Slot is now sold for Gems; the old pass below stays only to honor earlier buyers.
+ ShopSaveGems=150,
  Passes={
   shop_save_slot=2053955069,
   retro_collection=2053841030,

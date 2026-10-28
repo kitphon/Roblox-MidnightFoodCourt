@@ -1216,7 +1216,10 @@ function Service.Start()
      else
       s.Patience=math.clamp((s.Deadline-now)/orderSeconds(s),0,1)
       if s.CustomerStage=="Ordering" and now>=s.Deadline then Experience.Missed(s);strike(s);if s.Phase=="Playing" then nextOrder(s) end end
-      if s.Phase=="Playing" and s.CustomerStage=="Ordering" and not Service.OrderUnavailable(s) and not Experience.Training(s) and now>=s.NextEvent then
+      -- No interruptions during the whole guide (including the Upgrade Desk step) or in the final stretch,
+      -- so an unbanished SHADOW cannot void the last held dish when the shift ends.
+      local closingStretch=s.Ends-now<Catalog.Get("EventSeconds")+10
+      if s.Phase=="Playing" and s.CustomerStage=="Ordering" and not Service.OrderUnavailable(s) and not Experience.TutorialActive(s) and not closingStretch and now>=s.NextEvent then
        s.EventIndex=s.EventIndex%3+1;s.Event=({"BLACKOUT","WHISPER","SHADOW"})[s.EventIndex]
        s.EventBegan=now;s.EventDeadline=now+Catalog.Get("EventSeconds");s.NextEvent=now+Catalog.Get("EventInterval");cue(s,"Danger")
        if s.Event=="BLACKOUT" then lights(s,false) elseif s.Event=="SHADOW" then customer(s,true);shadowLights(s,now) end

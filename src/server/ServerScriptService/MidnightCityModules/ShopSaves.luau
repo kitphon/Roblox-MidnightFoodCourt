@@ -11,16 +11,32 @@ local S={Service=nil,Access={},LastAction={}}
 local lookKeys={"Theme","Uniform","Effect","Emote","StaffStyle","ShopEffect","TeamStyle"}
 local function copy(value) return Http:JSONDecode(Http:JSONEncode(value)) end
 local function passId() return Config.Passes.shop_save_slot or 0 end
+local function gemPrice() return Config.ShopSaveGems or 150 end
+-- Returns owned, known: known=false means the pass lookup failed with no cached answer.
 function S.Check(player,force)
+ local d=Profiles.Get(player)
+ if d and d.ShopSaveUnlocked==true then return true,true end
  local cached=S.Access[player]
- if cached and (cached.Test or not force and os.clock()-cached.Checked<60) then return cached.Owned end
+ if cached and (cached.Test or not force and os.clock()-cached.Checked<60) then return cached.Owned,true end
  if Profiles.Sandbox or passId()<=0 then
-  S.Access[player]={Owned=false,Checked=os.clock()};return false
+  S.Access[player]={Owned=false,Checked=os.clock()};return false,true
  end
+ -- Earlier buyers of the Robux Save Slot pass keep their access.
  local ok,owns=pcall(function() return Marketplace:UserOwnsGamePassAsync(player.UserId,passId()) end)
- if ok then S.Access[player]={Owned=owns,Checked=os.clock()};return owns end
+ if ok then S.Access[player]={Owned=owns,Checked=os.clock()};return owns,true end
  -- A temporary ownership lookup failure must not erase a verified entitlement.
- return cached and cached.Owned or false
+ return cached and cached.Owned or false,cached~=nil
+end
+-- Without a Save Slot each visit starts a fresh shop run. Gems, purchases, receipts, equipped looks,
+-- placed decorations, the saved design slot, quests and tutorial progress always persist.
+function S.ResetProgress(d)
+ d.Coins=Legacy.Get("StarterCoins")
+ d.Shop.Bank=Legacy.Get("StarterBank")
+ d.Shop.Upgrades={Kitchen=0,Service=0,Decor=0,Space=0}
+ d.Shop.Workers={}
+ d.Shop.Stock=nil
+ d.Shop.Career=nil;d.Shop.RileyServed=nil;d.Shop.RegularFavorites=nil;d.Shop.LastFoodReview=nil;d.Shop.FeatureSlot=nil
+ return true
 end
 function S.Capture(data)
  local look={}
@@ -51,7 +67,14 @@ function S.Restore(data,slot)
  return true,"Saved shop design loaded. Your latest progress is unchanged."
 end
 function S.Join(player)
- if not S.Check(player,true) then return end
+ local owned,known=S.Check(player,true)
+ player:SetAttribute("ShopProgressSaved",owned)
+ if not owned then
+  -- Never wipe progress on an unconfirmed lookup; a paying owner could be mid-outage.
+  if known then Profiles.Mutate(player,S.ResetProgress)
+  else warn("Save Slot ownership unknown; keeping shop progress",player.UserId) end
+  return
+ end
  local d=Profiles.Get(player)
  if d and d.ShopSaveSlot and d.ShopSaveAutoResume then
   local ok,message=Profiles.Mutate(player,function(profile) return S.Restore(profile,profile.ShopSaveSlot) end)
@@ -64,8 +87,8 @@ function S.Snapshot(player)
  local saved=d and d.ShopSaveSlot
  local theme=saved and saved.Look and saved.Look.Theme or ""
  local item=Catalog.Find(theme) or Legacy.Find(theme)
- return {Owned=cached and cached.Owned==true or false,PassId=passId(),Configured=passId()>0 and not Profiles.Sandbox,
- SuggestedRobux=Config.ShopSaveSuggestedRobux or 79,HasSave=saved~=nil,SavedAt=saved and saved.SavedAt or 0,
+ return {Owned=d and d.ShopSaveUnlocked==true or cached and cached.Owned==true or false,PassId=passId(),Configured=passId()>0 and not Profiles.Sandbox,
+ GemPrice=gemPrice(),Gems=d and d.Gems or 0,HasSave=saved~=nil,SavedAt=saved and saved.SavedAt or 0,
  ThemeName=item and item.Name or "Classic",AutoResume=d and d.ShopSaveAutoResume==true,
  Sandbox=Profiles.Sandbox,TestEnabled=Run:IsStudio() and Profiles.Sandbox and Config.EnableStudioTesting}
 end
@@ -76,11 +99,22 @@ function S.Command(player,action)
   S.Access[player]={Owned=true,Checked=os.clock(),Test=true}
   return true,"Studio test unlocked. No Robux charged; resets after Stop."
  end
- if action=="SaveBuyPass" then
-  if S.Check(player,true) then return true,"Save slot already unlocked" end
-  if Profiles.Sandbox or passId()<=0 then return false,"Save Slot pass is not configured yet" end
-  local ok=pcall(function() Marketplace:PromptGamePassPurchase(player,passId()) end)
-  return ok,ok and "Complete the Roblox purchase prompt" or "Purchase prompt unavailable"
+ if action=="SaveBuyGems" then
+  if S.Check(player,true) then return true,"Save Slot already unlocked" end
+  if os.clock()-(S.LastAction[player] or -10)<3 then return false,"Please wait a few seconds" end
+  S.LastAction[player]=os.clock()
+  local price=gemPrice()
+  local ok,message=Profiles.Mutate(player,function(profile)
+   if profile.ShopSaveUnlocked then return false,"Save Slot already unlocked" end
+   if profile.Gems<price then return false,"Need "..price.." Gems" end
+   profile.Gems-=price;profile.ShopSaveUnlocked=true
+   return true,"Save Slot unlocked forever • -"..price.." Gems. Your shop progress now saves between visits."
+  end)
+  if not ok then return false,message end
+  player:SetAttribute("ShopProgressSaved",true)
+  if not Profiles.Save(player,false) then return false,"Save failed. Your previous cloud save is protected." end
+  S.Service.SyncPlayer(player)
+  return true,Profiles.Sandbox and message.." (Studio session only)" or message
  end
  if not S.Check(player,false) then return false,"Unlock the permanent Save Slot pass first" end
  local pd=S.Service.PlayerData[player];local shop=pd and S.Service.Shops[pd.ShopId]

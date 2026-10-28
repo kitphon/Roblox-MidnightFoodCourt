@@ -71,7 +71,7 @@ local steps={
  {"2 / 5 • COOK AN ORDER","Follow the dish icon to its cooking station and interact.",""},
  {"3 / 5 • PRESS F IN GOLD","Watch the moving white marker. Press F or tap the action button once inside the gold zone. This practice try cannot fail.",""},
  {"4 / 5 • SERVE YOUR GUEST","Carry your finished dish to the serving counter.","Serve"},
- {"5 / 5 • YOUR FIRST UPGRADE","Go to the Upgrade Desk in your backroom. Buy an upgrade with Shop funds.",""}
+ {"5 / 5 • YOUR FIRST UPGRADE","Buy an upgrade at the backroom Upgrade Desk. Your next guest waits for you.",""}
 }
 -- Local prompts target a specific teammate; the server validates every transfer.
 local dishPrompts={}
@@ -346,14 +346,14 @@ task.spawn(function()
   task.wait(.15)
  end
 end)
--- Ambient citizens: local poses keep the server's route/root authoritative.
--- Static rest offsets survive streaming; only nearby actors update at 20 Hz.
+-- Ambient citizens: the server owns routes while each client smooths the replicated
+-- root and poses nearby actors every rendered frame. This avoids visible 20 Hz steps.
 task.spawn(function()
  local citizens=workspace:WaitForChild("MidnightCity"):WaitForChild("Citizens")
  local tracked={}
  local function track(model)
   if not model:IsA("Model") or tracked[model] then return end
-  local record={parts={},connections={},seed=model:GetAttribute("CitizenSeed") or 1,phase=0,blend=0}
+  local record={parts={},connections={},seed=model:GetAttribute("CitizenSeed") or 1,phase=0,blend=0,speed=0}
   tracked[model]=record
   local function add(p)
    if p:IsA("BasePart") and p:GetAttribute("CitizenRest") then record.parts[p]={rest=p:GetAttribute("CitizenRest"),group=p:GetAttribute("CitizenGroup")} end
@@ -367,24 +367,33 @@ task.spawn(function()
  citizens.ChildRemoved:Connect(function(m)
   local r=tracked[m];if r then for _,c in r.connections do c:Disconnect() end;tracked[m]=nil end
  end)
- local elapsed=0
  game:GetService("RunService").RenderStepped:Connect(function(dt)
-  elapsed+=dt;if elapsed<.05 then return end
-  local step=elapsed;elapsed=0
   local camera=workspace.CurrentCamera;if not camera then return end
   local now=os.clock()
   for model,r in tracked do
    local root=model.PrimaryPart
    if not root then continue end
-   local cf=root.CFrame;local pos=cf.Position
-   local speed=r.last and (pos-r.last).Magnitude/math.max(step,.001) or 0;r.last=pos
-   local nearby=(camera.CFrame.Position-pos).Magnitude<110
+   local targetCf=root.CFrame;local targetPos=targetCf.Position
+   local nearby=(camera.CFrame.Position-targetPos).Magnitude<110
    if not nearby then
-    if r.active then for p,v in r.parts do if p.Parent then p.CFrame=cf*v.rest end end end
-    r.active=false;r.blend=0;continue
+    r.farElapsed=(r.farElapsed or 0)+dt
+    if r.active or r.farElapsed>=.1 then
+     for p,v in r.parts do if p.Parent then p.CFrame=targetCf*v.rest end end
+     r.farCf=targetCf;r.farElapsed=0
+    end
+    r.active=false;r.visualCf=nil;r.lastVisualPos=nil;r.speed=0;r.blend=0;continue
    end
-   r.active=true;r.phase+=math.min(speed,10)*step*1.35
-   r.blend+=(math.clamp(speed/5,0,1)-r.blend)*math.min(1,step*9)
+   -- Exponential damping is framerate-independent. It absorbs uneven network
+   -- replication without changing the authoritative Root or the citizen's route.
+   local follow=1-math.exp(-18*dt)
+   local previousCf=r.visualCf or r.farCf or targetCf
+   r.visualCf=previousCf:Lerp(targetCf,follow);r.farCf=nil;r.farElapsed=0
+   local cf=r.visualCf;local pos=cf.Position
+   local measured=r.lastVisualPos and (pos-r.lastVisualPos).Magnitude/math.max(dt,.001) or 0
+   r.lastVisualPos=pos
+   r.speed+=(math.min(measured,10)-r.speed)*(1-math.exp(-10*dt))
+   r.active=true;r.phase+=r.speed*dt*1.35
+   r.blend+=(math.clamp(r.speed/5,0,1)-r.blend)*(1-math.exp(-9*dt))
    local stride=math.sin(r.phase)*.48*r.blend
    local idle=1-r.blend;local breath=math.sin(now*1.8+r.seed)*.035*idle
    local look=math.sin(now*.55+r.seed*1.7)*.22*idle
